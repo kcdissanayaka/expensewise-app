@@ -22,12 +22,17 @@ ExpenseWise helps users:
 ---
 
 ## 🛠️ Tech Stack
+*Front End*
 - **React Native (Expo)**
 - **Node.js** (planned backend)
-- **SQLite** (local storage)
-- **MongoDB** (Cloud storage)
+- **SQLite** (react-native-sqlite-storage)
+- **Charts** (react-native-chart-kit)
 - **Git & GitHub** for version control
 
+*Back End*
+- **Authentication: JWT + bcrypt**
+- **APIs: REST endpoints for sync, reports, auth**
+- **Cloud DB: MongoDB**
 ---
 
 ## 🚀 Getting Started
