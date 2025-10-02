@@ -25,6 +25,7 @@ ExpenseWise helps users:
 - **React Native (Expo)**
 - **Node.js** (planned backend)
 - **SQLite** (local storage)
+- **MongoDB** (Cloud storage)
 - **Git & GitHub** for version control
 
 ---
