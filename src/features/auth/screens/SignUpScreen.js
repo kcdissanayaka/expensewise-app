@@ -101,11 +101,12 @@ const SignUpScreen = ({ navigation }) => {
     setLoading(true);
     
     try {
-      const result = await authService.register(
-        formData.email,
-        formData.password,
-        formData.name
-      );
+      const result = await authService.register({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        currency: 'LKR' // Default currency
+      });
       
       if (result.success) {
         Alert.alert(
