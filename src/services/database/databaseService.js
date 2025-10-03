@@ -215,6 +215,21 @@ class DatabaseService {
     }
   }
 
+  // ADD THIS METHOD FOR PASSWORD RESET
+  async updateUserPassword(userId, newHashedPassword) {
+    try {
+      const result = await this.db.runAsync(
+        'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [newHashedPassword, userId]
+      );
+      console.log('Password updated successfully for user:', userId);
+      return result;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      throw error;
+    }
+  }
+
   // Income operations
   async createIncome(userId, incomeData) {
     try {
