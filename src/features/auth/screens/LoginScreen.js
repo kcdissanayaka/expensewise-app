@@ -72,7 +72,12 @@ const LoginScreen = ({ navigation }) => {
     setLoading(true);
     
     try {
+      // Current local implementation
       const result = await authService.login(email, password);
+
+      // Future API implementation (same interface!)
+      // const result = await authService.login(email, password);
+      // Internally calls: await fetch('/api/auth/login', ...)
       
       if (result.success) {
         // Navigation will be handled by the auth context/navigator
