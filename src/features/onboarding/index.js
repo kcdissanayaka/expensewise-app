@@ -2,5 +2,6 @@
 export { default as SplashScreen } from './screens/SplashScreen';
 export { default as WelcomeCarouselScreen } from './screens/WelcomeCarouselScreen';
 export { default as GoalSettingScreen } from './screens/GoalSettingScreen';
+export { default as IncomeSetupScreen } from './screens/IncomeSetupScreen';
 
 export { onboardingService } from './services';
