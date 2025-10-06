@@ -13,7 +13,7 @@ import { useTheme } from '../../../app/providers/ThemeProvider';
 
 const { width } = Dimensions.get('window');
 
-export default function WelcomeCarouselScreen() {
+export default function WelcomeCarouselScreen({ navigation }) {
   const { theme } = useTheme();
   const scrollRef = useRef(null);
   const [current, setCurrent] = useState(0);
@@ -58,13 +58,17 @@ export default function WelcomeCarouselScreen() {
   };
 
   const onNext = () => {
-    if (current < slides.length - 1) goTo(current + 1);
-    // on last slide, do nothing yet (no navigation at this stage)
+    if (current < slides.length - 1) {
+      goTo(current + 1);
+    } else {
+      // On the last slide ("Set Goals"), navigate to GoalSettingScreen
+      navigation.navigate('GoalSetting');
+    }
   };
 
   const onSkip = () => {
-    // jump to last slide (no completion, just UI)
-    goTo(slides.length - 1);
+    // Skip directly to GoalSettingScreen
+    navigation.navigate('GoalSetting');
   };
 
   const renderDot = (i) => (
