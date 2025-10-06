@@ -102,6 +102,20 @@ async function getCurrentStep() {
   }
 }
 
+/**
+ * Save income data
+ */
+async function saveIncomeData(incomeData) {
+  try {
+    // Store income data in AsyncStorage
+    await AsyncStorage.setItem('user_income_data', JSON.stringify(incomeData));
+    return true;
+  } catch (error) {
+    console.error('Error saving income data:', error);
+    return false;
+  }
+}
+
 export default {
   isOnboardingComplete,
   setOnboardingComplete,
@@ -109,5 +123,6 @@ export default {
   getFinancialGoalsOptions,
   saveFinancialGoals,
   saveCurrentStep,
-  getCurrentStep
+  getCurrentStep,
+  saveIncomeData
 };
