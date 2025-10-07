@@ -116,6 +116,21 @@ async function saveIncomeData(incomeData) {
   }
 }
 
+/**
+ * Process any temporary data that was saved during onboarding
+ */
+async function processTemporaryData() {
+  try {
+    // Process any temporary data stored during onboarding
+    // This could include moving data from temp storage to permanent storage
+    // For now, just return true as placeholder
+    return true;
+  } catch (error) {
+    console.error('Error processing temporary data:', error);
+    return false;
+  }
+}
+
 export default {
   isOnboardingComplete,
   setOnboardingComplete,
@@ -124,5 +139,6 @@ export default {
   saveFinancialGoals,
   saveCurrentStep,
   getCurrentStep,
-  saveIncomeData
+  saveIncomeData,
+  processTemporaryData
 };
