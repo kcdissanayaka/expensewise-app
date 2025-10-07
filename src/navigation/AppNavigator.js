@@ -31,8 +31,9 @@ const AuthNavigator = () => {
         component={ForgotPasswordScreen}
         options={{ title: 'Reset Password' }}
          />
-      <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
-       <Stack.Screen name="AppTabs" component={TabNavigator} />
+        <Stack.Screen name="Splash" component={SplashScreen} />
+        <Stack.Screen name="WelcomeCarousel" component={WelcomeCarouselScreen} />
+
     </Stack.Navigator>
   );
 };
