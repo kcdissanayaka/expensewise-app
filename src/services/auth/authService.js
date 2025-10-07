@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import databaseService from '../database/databaseService';
 
 class AuthService {
@@ -252,6 +253,9 @@ class AuthService {
       const { password_hash, ...userWithoutPassword } = user;
       this.currentUser = userWithoutPassword;
 
+      // Store user session in AsyncStorage
+      await AsyncStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
+
       return {
         success: true,
         user: userWithoutPassword,
@@ -267,6 +271,8 @@ class AuthService {
   async logout() {
     try {
       this.currentUser = null;
+      // Clear stored session
+      await AsyncStorage.removeItem('currentUser');
       return {
         success: true,
         message: 'Logout successful'
@@ -283,15 +289,32 @@ class AuthService {
   }
 
   // Check if user is logged in
-  isLoggedIn() {
-    return this.currentUser !== null;
+  async isLoggedIn() {
+    if (this.currentUser !== null) {
+      return true;
+    }
+    
+    // Try to restore session from AsyncStorage
+    try {
+      const storedUser = await this.restoreSession();
+      if (storedUser) {
+        this.currentUser = storedUser;
+        return true;
+      }
+    } catch (error) {
+      console.error('Error checking login status:', error);
+    }
+    
+    return false;
   }
 
   // Restore session (for app restart)
   async restoreSession() {
     try {
-      // For now, just return null - later can implement AsyncStorage
-      // This would restore the user session from local storage
+      const storedUser = await AsyncStorage.getItem('currentUser');
+      if (storedUser) {
+        return JSON.parse(storedUser);
+      }
       return null;
     } catch (error) {
       console.error('Session restore error:', error);

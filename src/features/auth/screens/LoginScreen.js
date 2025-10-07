@@ -15,7 +15,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../../../services';
-import { CommonActions } from '@react-navigation/native'; // import comman to get rest butil in action
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -79,34 +78,13 @@ const LoginScreen = ({ navigation }) => {
       // Current local implementation
       const result = await authService.login(email, password);
 
-      // Future API implementation (same interface!)
-      // const result = await authService.login(email, password);
-      // Internally calls: await fetch('/api/auth/login', ...)
-      
-      // if (result.success) {
-      //   // Navigation will be handled by the auth context/navigator
-      //   Alert.alert('Success', result.message);
-      //   console.log('[LOGIN] success -> navigating to AppTabs'); navigation.reset({ index: 0, routes: [{ name: 'AppTabs' }] }); console.log('[LOGIN] reset dispatched');
-      //   const parent = navigation.getParent?.() || navigation;
-      //   parent.navigate('AppTabs');
-      //   console.log('[LOGIN] success -> navigating to AppTabs'); navigation.reset({ index: 0, routes: [{ name: 'AppTabs' }] }); console.log('[LOGIN] reset dispatched');
-      // }
       if (result.success) {
-  // TEMP: Navigate to AppTabs (TabNavigator) via the *parent* navigator.
-  // Reason: LoginScreen is inside an Auth (child) stack, while AppTabs lives in the root stack.
-  // Using parent.navigate avoids the “RESET not handled by any navigator” error for now.
-  // TODO: Later replace with a parent-level reset to clear back history:
-  //   parent.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'AppTabs' }] }));
-     // console.log('[NAV] current routes:', navigation.getState()?.routes?.map(r => r.name));  
+
       const parent = navigation.getParent?.() || navigation;
-     //  console.log('[NAV] parent routes:', parent?.getState()?.routes?.map(r => r.name));
-       // parent.navigate('AppTabs');
-       parent.dispatch(
-          CommonActions.reset({
-            index: 0,                            // active route index in the new stack
-            routes: [{ name: 'Onboarding' }],       // the whole new stack: just AppTabs
-          })
-        );
+       navigation.reset({
+          index: 0,
+          routes: [{ name: 'Dashboard' }],
+        });
         return; // stop after navigating (prevents any leftover code from running)
       } else {
         Alert.alert('Login Failed', result.message);
@@ -304,7 +282,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#424242',
-    letterSpacing: 1,
+    letterSpacing: 1, 
   },
   formContainer: {
     backgroundColor: '#FFFFFF',
