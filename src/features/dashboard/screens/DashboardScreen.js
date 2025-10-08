@@ -290,7 +290,7 @@ const DashboardScreen = ({ navigation }) => {
   const renderWelcomeCard = () => (
     <View style={[styles.welcomeCard, { backgroundColor: theme.colors.primary }]}>
       <Text style={styles.welcomeTitle}>
-        Welcome back, {dashboardData.user?.name}! 👋
+        Welcome back, {dashboardData.user?.name}! 
       </Text>
       <Text style={styles.welcomeSubtitle}>
         Here's your financial overview for {dashboardData.monthlyStats.currentMonth}
