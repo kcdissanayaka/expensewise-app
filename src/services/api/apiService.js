@@ -21,7 +21,7 @@ class ApiService {
         ...options,
       };
 
-      // For now, we'll just log the request (since backend might not be running)
+      
       console.log(`API Request: ${config.method || 'GET'} ${url}`);
       
       const response = await fetch(url, config);
@@ -34,14 +34,13 @@ class ApiService {
       return data;
     } catch (error) {
       console.error('API Request failed:', error);
-      // For development, we'll return a mock response instead of throwing
       return this.getMockResponse(endpoint, options);
     }
   }
 
-  // Mock responses for development (when backend is not running)
+  // Mock responses for offline mode or errors
   getMockResponse(endpoint, options) {
-    console.log('🔧 Using mock response for:', endpoint);
+    console.log('Using mock response for:', endpoint);
     
     // Return appropriate mock data based on endpoint
     if (endpoint.includes('/auth/login')) {
@@ -115,7 +114,7 @@ class ApiService {
     });
   }
 
-  // Expense endpoints (for future use)
+  // Expense endpoints 
   async getExpenses(params = {}) {
     const queryString = new URLSearchParams(params).toString();
     const endpoint = queryString ? `/expenses?${queryString}` : '/expenses';
@@ -142,7 +141,7 @@ class ApiService {
     });
   }
 
-  // Category endpoints (for future use)
+  // Category endpoints 
   async getCategories() {
     return await this.request('/categories');
   }
@@ -166,7 +165,7 @@ class ApiService {
     });
   }
 
-  // Dashboard/Reports endpoints (for future use)
+  // Dashboard/Reports endpoints 
   async getDashboardData(params = {}) {
     const queryString = new URLSearchParams(params).toString();
     const endpoint = queryString ? `/dashboard?${queryString}` : '/dashboard';

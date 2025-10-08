@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -10,16 +10,16 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  SafeAreaView
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import { authService } from '../../../services';
-import onboardingService from '../../onboarding/services/onboardingService';
+  SafeAreaView,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { authService } from "../../../services";
+import onboardingService from "../../onboarding/services/onboardingService";
 
 const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,22 +35,28 @@ const LoginScreen = ({ navigation }) => {
   const handleEmailChange = (text) => {
     const trimmedEmail = text.trim();
     setEmail(text);
-    
+
     if (text.length > 0 && !validateEmail(trimmedEmail)) {
-      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      setErrors((prev) => ({
+        ...prev,
+        email: "Please enter a valid email address",
+      }));
     } else {
-      setErrors(prev => ({ ...prev, email: null }));
+      setErrors((prev) => ({ ...prev, email: null }));
     }
   };
 
   // Real-time password validation
   const handlePasswordChange = (text) => {
     setPassword(text);
-    
+
     if (text.length > 0 && text.length < 6) {
-      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters' }));
+      setErrors((prev) => ({
+        ...prev,
+        password: "Password must be at least 6 characters",
+      }));
     } else {
-      setErrors(prev => ({ ...prev, password: null }));
+      setErrors((prev) => ({ ...prev, password: null }));
     }
   };
 
@@ -73,116 +79,129 @@ const LoginScreen = ({ navigation }) => {
 
     // Validate form before submission
     if (!email.trim()) {
-      setErrors(prev => ({ ...prev, email: 'Email is required' }));
+      setErrors((prev) => ({ ...prev, email: "Email is required" }));
       return;
     }
-    
+
     if (!password) {
-      setErrors(prev => ({ ...prev, password: 'Password is required' }));
+      setErrors((prev) => ({ ...prev, password: "Password is required" }));
       return;
     }
 
     if (!validateEmail(email.trim())) {
-      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      setErrors((prev) => ({
+        ...prev,
+        email: "Please enter a valid email address",
+      }));
       return;
     }
 
     if (password.length < 6) {
-      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters' }));
+      setErrors((prev) => ({
+        ...prev,
+        password: "Password must be at least 6 characters",
+      }));
       return;
     }
 
     setLoading(true);
-    
+
     try {
       // Attempt login
-      const result = await authService.login(email.trim().toLowerCase(), password);
-      
+      const result = await authService.login(
+        email.trim().toLowerCase(),
+        password
+      );
+
       if (result.success) {
         // Process any temporary onboarding data that was saved before login
         try {
           await onboardingService.processTemporaryData();
         } catch (tempDataError) {
-          console.warn('Error processing temporary data:', tempDataError);
+          console.warn("Error processing temporary data:", tempDataError);
           // Don't block login for temporary data processing errors
         }
-        
+
         // Check if user needs onboarding
         try {
-          const isOnboardingComplete = await onboardingService.isOnboardingComplete();
-          
+          const isOnboardingComplete =
+            await onboardingService.isOnboardingComplete();
+
           if (!isOnboardingComplete) {
             // User needs onboarding - navigate to onboarding flow
             navigation.reset({
               index: 0,
-              routes: [{ name: 'Onboarding' }],
+              routes: [{ name: "Onboarding" }],
             });
           } else {
             // User has completed onboarding - go to dashboard
             navigation.reset({
               index: 0,
-              routes: [{ name: 'Dashboard' }],
+              routes: [{ name: "Dashboard" }],
             });
           }
         } catch (onboardingError) {
-          console.warn('Error checking onboarding status:', onboardingError);
+          console.warn("Error checking onboarding status:", onboardingError);
           // Default to dashboard if onboarding check fails
           navigation.reset({
             index: 0,
-            routes: [{ name: 'Dashboard' }],
+            routes: [{ name: "Dashboard" }],
           });
         }
       } else {
         // Handle specific login failure reasons
-        const errorMessage = result.message || 'Login failed';
-        
-        if (errorMessage.toLowerCase().includes('email')) {
-          setErrors(prev => ({ ...prev, email: errorMessage }));
-        } else if (errorMessage.toLowerCase().includes('password')) {
-          setErrors(prev => ({ ...prev, password: errorMessage }));
+        const errorMessage = result.message || "Login failed";
+
+        if (errorMessage.toLowerCase().includes("email")) {
+          setErrors((prev) => ({ ...prev, email: errorMessage }));
+        } else if (errorMessage.toLowerCase().includes("password")) {
+          setErrors((prev) => ({ ...prev, password: errorMessage }));
         } else {
-          Alert.alert('Login Failed', errorMessage);
+          Alert.alert("Login Failed", errorMessage);
         }
       }
     } catch (error) {
-      console.error('Login error:', error);
-      
+      console.error("Login error:", error);
+
       // Handle different types of errors
-      if (error.message.includes('network') || error.message.includes('fetch')) {
+      if (
+        error.message.includes("network") ||
+        error.message.includes("fetch")
+      ) {
         Alert.alert(
-          'Connection Error',
-          'Please check your internet connection and try again.',
+          "Connection Error",
+          "Please check your internet connection and try again.",
           [
-            { text: 'Retry', onPress: handleLogin },
-            { text: 'Cancel', style: 'cancel' }
+            { text: "Retry", onPress: handleLogin },
+            { text: "Cancel", style: "cancel" },
           ]
         );
-      } else if (error.message.includes('database') || error.message.includes('SQLite')) {
+      } else if (
+        error.message.includes("database") ||
+        error.message.includes("SQLite")
+      ) {
         Alert.alert(
-          'Database Error',
-          'There was an issue accessing your account data. Please try restarting the app.',
-          [{ text: 'OK' }]
+          "Database Error",
+          "There was an issue accessing your account data. Please try restarting the app.",
+          [{ text: "OK" }]
         );
-      } else if (error.message.includes('timeout')) {
+      } else if (error.message.includes("timeout")) {
         Alert.alert(
-          'Request Timeout',
-          'The login request took too long. Please try again.',
+          "Request Timeout",
+          "The login request took too long. Please try again.",
           [
-            { text: 'Retry', onPress: handleLogin },
-            { text: 'Cancel', style: 'cancel' }
+            { text: "Retry", onPress: handleLogin },
+            { text: "Cancel", style: "cancel" },
           ]
         );
       } else {
         // Generic error handling
-        const errorMessage = error.message || 'An unexpected error occurred during login';
-        Alert.alert(
-          'Login Error',
-          errorMessage,
-          [
-            { text: 'Try Again', onPress: handleLogin },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
+        const errorMessage =
+          error.message || "An unexpected error occurred during login";
+        Alert.alert("Login Error", errorMessage, [
+          { text: "Try Again", onPress: handleLogin },
+          { text: "Cancel", style: "cancel" },
+        ]);
       }
     } finally {
       setLoading(false);
@@ -192,13 +211,13 @@ const LoginScreen = ({ navigation }) => {
   // Handle forgot password
   const handleForgotPassword = () => {
     try {
-      navigation.navigate('ForgotPassword');
+      navigation.navigate("ForgotPassword");
     } catch (navError) {
-      console.error('Navigation error to ForgotPassword:', navError);
+      console.error("Navigation error to ForgotPassword:", navError);
       Alert.alert(
-        'Navigation Error',
-        'Unable to open forgot password screen. Please try again.',
-        [{ text: 'OK' }]
+        "Navigation Error",
+        "Unable to open forgot password screen. Please try again.",
+        [{ text: "OK" }]
       );
     }
   };
@@ -206,13 +225,13 @@ const LoginScreen = ({ navigation }) => {
   // Handle sign up
   const handleSignUp = () => {
     try {
-      navigation.navigate('SignUp');
+      navigation.navigate("SignUp");
     } catch (navError) {
-      console.error('Navigation error to SignUp:', navError);
+      console.error("Navigation error to SignUp:", navError);
       Alert.alert(
-        'Navigation Error',
-        'Unable to open sign up screen. Please try again.',
-        [{ text: 'OK' }]
+        "Navigation Error",
+        "Unable to open sign up screen. Please try again.",
+        [{ text: "OK" }]
       );
     }
   };
@@ -220,12 +239,11 @@ const LoginScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-          
           {/* Header Section */}
           <View style={styles.header}>
             <Text style={styles.appTitle}>ExpenseWise</Text>
@@ -234,15 +252,11 @@ const LoginScreen = ({ navigation }) => {
 
           {/* Form Section */}
           <View style={styles.formContainer}>
-            
             {/* User Name Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>USER NAME</Text>
+              <Text style={styles.inputLabel}>USERNAME</Text>
               <TextInput
-                style={[
-                  styles.textInput,
-                  errors.email && styles.inputError
-                ]}
+                style={[styles.textInput, errors.email && styles.inputError]}
                 value={email}
                 onChangeText={handleEmailChange}
                 placeholder="Email"
@@ -263,11 +277,11 @@ const LoginScreen = ({ navigation }) => {
                 <TextInput
                   style={[
                     styles.textInput,
-                    errors.password && styles.inputError
+                    errors.password && styles.inputError,
                   ]}
                   value={password}
                   onChangeText={handlePasswordChange}
-                  placeholder="••••••"
+                  placeholder="........."
                   secureTextEntry={!showPassword}
                   autoComplete="password"
                   editable={!loading}
@@ -277,10 +291,10 @@ const LoginScreen = ({ navigation }) => {
                   onPress={() => setShowPassword(!showPassword)}
                   disabled={loading}
                 >
-                  <Ionicons 
-                    name={showPassword ? "eye-off" : "eye"} 
-                    size={20} 
-                    color="#9E9E9E" 
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={20}
+                    color="#9E9E9E"
                   />
                 </TouchableOpacity>
               </View>
@@ -291,12 +305,17 @@ const LoginScreen = ({ navigation }) => {
 
             {/* Remember Me and Forgot Password Row */}
             <View style={styles.rememberForgotContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.checkboxContainer}
                 onPress={() => setRememberMe(!rememberMe)}
                 disabled={loading}
               >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                <View
+                  style={[
+                    styles.checkbox,
+                    rememberMe && styles.checkboxChecked,
+                  ]}
+                >
                   {rememberMe && (
                     <Ionicons name="checkmark" size={16} color="#FFFFFF" />
                   )}
@@ -304,7 +323,7 @@ const LoginScreen = ({ navigation }) => {
                 <Text style={styles.checkboxLabel}>REMEMBER ME</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={handleForgotPassword}
                 disabled={loading}
               >
@@ -316,7 +335,7 @@ const LoginScreen = ({ navigation }) => {
             <TouchableOpacity
               style={[
                 styles.loginButton,
-                (!isFormValid() || loading) && styles.loginButtonDisabled
+                (!isFormValid() || loading) && styles.loginButtonDisabled,
               ]}
               onPress={handleLogin}
               disabled={!isFormValid() || loading}
@@ -336,12 +355,9 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             {/* Google Sign In Button */}
-            <TouchableOpacity
-              style={styles.googleButton}
-              disabled={loading}
-            >
+            <TouchableOpacity style={styles.googleButton} disabled={loading}>
               <View style={styles.googleIcon}>
-                <Text style={styles.googleIconText}>🔐</Text>
+                <Ionicons name="logo-google" size={20} color="#4285F4" />
               </View>
               <Text style={styles.googleButtonText}>Continue With Google</Text>
             </TouchableOpacity>
@@ -349,14 +365,10 @@ const LoginScreen = ({ navigation }) => {
             {/* Sign Up Section */}
             <View style={styles.signUpSection}>
               <Text style={styles.signUpTitle}>Don't have an account?</Text>
-              <TouchableOpacity 
-                onPress={handleSignUp}
-                disabled={loading}
-              >
+              <TouchableOpacity onPress={handleSignUp} disabled={loading}>
                 <Text style={styles.signUpLink}>Sign Up here</Text>
               </TouchableOpacity>
             </View>
-
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -367,40 +379,40 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E3F2FD', // Light blue background like in image
+    backgroundColor: "#f9f9f9ff",
   },
   keyboardView: {
     flex: 1,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-  },
+  // scrollContainer: {
+  //   flexGrow: 1,
+  //   justifyContent: 'center',
+  //   paddingHorizontal: 24,
+  //   paddingVertical: 40,
+  // },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 60,
     paddingTop: 40,
   },
   appTitle: {
     fontSize: 36,
-    fontWeight: 'bold',
-    color: '#1976D2', // Blue color matching image
+    fontWeight: "bold",
+    color: "#1976D2",
     marginBottom: 8,
   },
   tagline: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#424242',
+    fontWeight: "600",
+    color: "#424242",
     letterSpacing: 1,
   },
   formContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 32,
     marginHorizontal: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 4,
@@ -414,8 +426,8 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#757575',
+    fontWeight: "600",
+    color: "#757575",
     marginBottom: 8,
     letterSpacing: 0.5,
   },
@@ -425,75 +437,75 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#E8F4FD', // Light blue input background
-    color: '#424242',
+    backgroundColor: "#E8F4FD",
+    color: "#424242",
   },
   inputError: {
     borderWidth: 1,
-    borderColor: '#F44336',
+    borderColor: "#F44336",
   },
   passwordContainer: {
-    position: 'relative',
+    position: "relative",
   },
   eyeButton: {
-    position: 'absolute',
+    position: "absolute",
     right: 16,
     top: 0,
     height: 56,
     width: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   errorText: {
-    color: '#F44336',
+    color: "#F44336",
     fontSize: 12,
     marginTop: 4,
   },
   rememberForgotContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 32,
   },
   checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#BDBDBD',
+    borderColor: "#BDBDBD",
     borderRadius: 4,
     marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
   checkboxChecked: {
-    backgroundColor: '#1976D2',
-    borderColor: '#1976D2',
+    backgroundColor: "#1976D2",
+    borderColor: "#1976D2",
   },
   checkboxLabel: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#757575',
+    fontWeight: "500",
+    color: "#757575",
     letterSpacing: 0.5,
   },
   forgotPasswordText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#1976D2',
-    textDecorationLine: 'underline',
+    fontWeight: "500",
+    color: "#1976D2",
+    textDecorationLine: "underline",
   },
   loginButton: {
-    backgroundColor: '#1976D2', // Blue button matching image
+    backgroundColor: "#1976D2",
     height: 56,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 24,
-    shadowColor: '#1976D2',
+    shadowColor: "#1976D2",
     shadowOffset: {
       width: 0,
       height: 4,
@@ -503,79 +515,81 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   loginButtonDisabled: {
-    backgroundColor: '#BDBDBD',
+    backgroundColor: "#BDBDBD",
     shadowOpacity: 0,
     elevation: 0,
   },
   loginButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: "#E0E0E0",
   },
   dividerText: {
     fontSize: 14,
-    color: '#757575',
+    color: "#757575",
     marginHorizontal: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   googleButton: {
-    backgroundColor: '#1976D2', // Blue Google button matching image
+    backgroundColor: "#FFFFFF",
     height: 56,
     borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 40,
-    shadowColor: '#1976D2',
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    shadowColor: "#000000",
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   googleIcon: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFC107',
-    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
   },
   googleIconText: {
     fontSize: 12,
   },
   googleButtonText: {
-    color: '#FFFFFF',
+    color: "#424242",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   signUpSection: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   signUpTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#424242',
+    fontWeight: "700",
+    color: "#424242",
     marginBottom: 8,
   },
   signUpLink: {
     fontSize: 16,
-    color: '#1976D2',
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    color: "#1976D2",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });
 

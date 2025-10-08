@@ -18,28 +18,40 @@ export const DatabaseProvider = ({ children }) => {
       setIsLoading(true);
       setError(null);
       
+      console.log('Starting database initialization...');
+      
       const success = await databaseService.initialize();
       
       if (success) {
         setIsInitialized(true);
-        console.log('Database initialized successfully');
+        console.log('Database provider: Database initialized successfully');
       } else {
-        throw new Error('Database initialization failed');
+        throw new Error('Database initialization returned false');
       }
     } catch (error) {
-      console.error('Database initialization error:', error);
+      console.error('Database provider initialization error:', error);
       setError(error.message);
+      setIsInitialized(false);
       
-      Alert.alert(
-        'Database Error',
-        'Failed to initialize the database. Please restart the app.',
-        [
-          {
-            text: 'Retry',
-            onPress: initializeDatabase
-          }
-        ]
-      );
+      // Don't show alert in development, just log
+      if (__DEV__) {
+        console.warn('Database initialization failed in development mode');
+      } else {
+        Alert.alert(
+          'Database Error',
+          'Failed to initialize the database. Please restart the app.',
+          [
+            {
+              text: 'Retry',
+              onPress: initializeDatabase
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
     } finally {
       setIsLoading(false);
     }
