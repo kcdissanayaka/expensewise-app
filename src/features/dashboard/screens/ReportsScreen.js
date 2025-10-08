@@ -18,13 +18,13 @@ const { width } = Dimensions.get('window');
 const ReportsScreen = ({ navigation }) => {
   const { theme } = useTheme();
   const [reportData, setReportData] = useState({
-    monthlyExpenses: [],
+    // monthlyExpenses: [],
     categoryBreakdown: [],
     totalIncome: 0,
     totalExpenses: 0,
     savingsRate: 0,
     topCategories: [],
-    weeklyTrend: []
+    // weeklyTrend: []
   });
   const [selectedPeriod, setSelectedPeriod] = useState('month'); // month, quarter, year
   const [loading, setLoading] = useState(true);
@@ -115,10 +115,10 @@ const ReportsScreen = ({ navigation }) => {
     const topCategories = categoryBreakdown.slice(0, 5);
 
     // Weekly trend (last 4 weeks)
-    const weeklyTrend = calculateWeeklyTrend(periodExpenses);
+    // const weeklyTrend = calculateWeeklyTrend(periodExpenses);
 
     // Monthly expenses for the year
-    const monthlyExpenses = calculateMonthlyExpenses(expenseData, now.getFullYear());
+    // const monthlyExpenses = calculateMonthlyExpenses(expenseData, now.getFullYear());
 
     return {
       totalIncome,
@@ -126,60 +126,60 @@ const ReportsScreen = ({ navigation }) => {
       savingsRate,
       categoryBreakdown,
       topCategories,
-      weeklyTrend,
-      monthlyExpenses
+      // weeklyTrend,
+      // monthlyExpenses
     };
   };
 
-  const calculateWeeklyTrend = (expenses) => {
-    const weeks = [];
-    const now = new Date();
+  // const calculateWeeklyTrend = (expenses) => {
+  //   const weeks = [];
+  //   const now = new Date();
     
-    for (let i = 3; i >= 0; i--) {
-      const weekEnd = new Date(now);
-      weekEnd.setDate(now.getDate() - (i * 7));
-      const weekStart = new Date(weekEnd);
-      weekStart.setDate(weekEnd.getDate() - 6);
+  //   for (let i = 3; i >= 0; i--) {
+  //     const weekEnd = new Date(now);
+  //     weekEnd.setDate(now.getDate() - (i * 7));
+  //     const weekStart = new Date(weekEnd);
+  //     weekStart.setDate(weekEnd.getDate() - 6);
 
-      const weekExpenses = expenses.filter(expense => {
-        const expenseDate = new Date(expense.created_at);
-        return expenseDate >= weekStart && expenseDate <= weekEnd;
-      });
+  //     const weekExpenses = expenses.filter(expense => {
+  //       const expenseDate = new Date(expense.created_at);
+  //       return expenseDate >= weekStart && expenseDate <= weekEnd;
+  //     });
 
-      const total = weekExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  //     const total = weekExpenses.reduce((sum, expense) => sum + expense.amount, 0);
       
-      weeks.push({
-        label: `Week ${4 - i}`,
-        amount: total,
-        startDate: weekStart,
-        endDate: weekEnd
-      });
-    }
+  //     weeks.push({
+  //       label: `Week ${4 - i}`,
+  //       amount: total,
+  //       startDate: weekStart,
+  //       endDate: weekEnd
+  //     });
+  //   }
 
-    return weeks;
-  };
+  //   return weeks;
+  // };
 
-  const calculateMonthlyExpenses = (expenses, year) => {
-    const months = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // const calculateMonthlyExpenses = (expenses, year) => {
+  //   const months = [];
+  //   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  //                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    for (let month = 0; month < 12; month++) {
-      const monthExpenses = expenses.filter(expense => {
-        const expenseDate = new Date(expense.created_at);
-        return expenseDate.getFullYear() === year && expenseDate.getMonth() === month;
-      });
+  //   for (let month = 0; month < 12; month++) {
+  //     const monthExpenses = expenses.filter(expense => {
+  //       const expenseDate = new Date(expense.created_at);
+  //       return expenseDate.getFullYear() === year && expenseDate.getMonth() === month;
+  //     });
 
-      const total = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  //     const total = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
       
-      months.push({
-        month: monthNames[month],
-        amount: total
-      });
-    }
+  //     months.push({
+  //       month: monthNames[month],
+  //       amount: total
+  //     });
+  //   }
 
-    return months;
-  };
+  //   return months;
+  // };
 
   const getCategoryColor = (categoryId) => {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF'];
@@ -307,84 +307,84 @@ const ReportsScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderWeeklyTrend = () => (
-    <View style={[styles.trendCard, { backgroundColor: theme.colors.card }]}>
-      <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-        Weekly Spending Trend 📊
-      </Text>
+  // const renderWeeklyTrend = () => (
+  //   <View style={[styles.trendCard, { backgroundColor: theme.colors.card }]}>
+  //     <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+  //       Weekly Spending Trend 📊
+  //     </Text>
       
-      <View style={styles.chartContainer}>
-        {reportData.weeklyTrend.map((week, index) => {
-          const maxAmount = Math.max(...reportData.weeklyTrend.map(w => w.amount));
-          const height = maxAmount > 0 ? (week.amount / maxAmount) * 100 : 0;
+  //     <View style={styles.chartContainer}>
+  //       {reportData.weeklyTrend.map((week, index) => {
+  //         const maxAmount = Math.max(...reportData.weeklyTrend.map(w => w.amount));
+  //         const height = maxAmount > 0 ? (week.amount / maxAmount) * 100 : 0;
           
-          return (
-            <View key={index} style={styles.barContainer}>
-              <View style={styles.barWrapper}>
-                <View
-                  style={[
-                    styles.bar,
-                    {
-                      height: `${height}%`,
-                      backgroundColor: theme.colors.primary
-                    }
-                  ]}
-                />
-              </View>
-              <Text style={[styles.barLabel, { color: theme.colors.textSecondary }]}>
-                {week.label}
-              </Text>
-              <Text style={[styles.barAmount, { color: theme.colors.text }]}>
-                {formatCurrency(week.amount)}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
+  //         return (
+  //           <View key={index} style={styles.barContainer}>
+  //             <View style={styles.barWrapper}>
+  //               <View
+  //                 style={[
+  //                   styles.bar,
+  //                   {
+  //                     height: `${height}%`,
+  //                     backgroundColor: theme.colors.primary
+  //                   }
+  //                 ]}
+  //               />
+  //             </View>
+  //             <Text style={[styles.barLabel, { color: theme.colors.textSecondary }]}>
+  //               {week.label}
+  //             </Text>
+  //             <Text style={[styles.barAmount, { color: theme.colors.text }]}>
+  //               {formatCurrency(week.amount)}
+  //             </Text>
+  //           </View>
+  //         );
+  //       })}
+  //     </View>
+  //   </View>
+  // );
 
-  const renderMonthlyChart = () => {
-    const maxAmount = Math.max(...reportData.monthlyExpenses.map(m => m.amount));
+  // const renderMonthlyChart = () => {
+  //   const maxAmount = Math.max(...reportData.monthlyExpenses.map(m => m.amount));
     
-    return (
-      <View style={[styles.monthlyCard, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-          Monthly Expenses (This Year) 📅
-        </Text>
+  //   return (
+  //     <View style={[styles.monthlyCard, { backgroundColor: theme.colors.card }]}>
+  //       <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+  //         Monthly Expenses (This Year) 📅
+  //       </Text>
         
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.monthlyChart}>
-            {reportData.monthlyExpenses.map((month, index) => {
-              const height = maxAmount > 0 ? (month.amount / maxAmount) * 80 : 0;
+  //       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+  //         <View style={styles.monthlyChart}>
+  //           {reportData.monthlyExpenses.map((month, index) => {
+  //             const height = maxAmount > 0 ? (month.amount / maxAmount) * 80 : 0;
               
-              return (
-                <View key={index} style={styles.monthContainer}>
-                  <View style={styles.monthBarWrapper}>
-                    <View
-                      style={[
-                        styles.monthBar,
-                        {
-                          height: height,
-                          backgroundColor: theme.colors.primary
-                        }
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.monthLabel, { color: theme.colors.textSecondary }]}>
-                    {month.month}
-                  </Text>
-                  <Text style={[styles.monthAmount, { color: theme.colors.text }]}>
-                    {formatCurrency(month.amount)}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
-      </View>
-    );
-  };
+  //             return (
+  //               <View key={index} style={styles.monthContainer}>
+  //                 <View style={styles.monthBarWrapper}>
+  //                   <View
+  //                     style={[
+  //                       styles.monthBar,
+  //                       {
+  //                         height: height,
+  //                         backgroundColor: theme.colors.primary
+  //                       }
+  //                     ]}
+  //                   />
+  //                 </View>
+  //                 <Text style={[styles.monthLabel, { color: theme.colors.textSecondary }]}>
+  //                   {month.month}
+  //                 </Text>
+  //                 <Text style={[styles.monthAmount, { color: theme.colors.text }]}>
+  //                   {formatCurrency(month.amount)}
+  //                 </Text>
+  //               </View>
+  //             );
+  //           })}
+  //         </View>
+  //       </ScrollView>
+  //     </View>
+  //   );
+  // };
 
   if (loading) {
     return (
@@ -422,8 +422,8 @@ const ReportsScreen = ({ navigation }) => {
         {renderPeriodSelector()}
         {renderSummaryCard()}
         {renderCategoryBreakdown()}
-        {renderWeeklyTrend()}
-        {renderMonthlyChart()}
+        {/* {renderWeeklyTrend()} */}
+        {/* {renderMonthlyChart()} */}
       </ScrollView>
     </SafeAreaView>
   );
