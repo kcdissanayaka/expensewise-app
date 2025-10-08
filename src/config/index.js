@@ -7,9 +7,8 @@ export const CONFIG = {
   CHART_COLORS: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
 };
 
-// API Configuration - Update these when backend is ready
+// API Configuration
 export const API_CONFIG = {
-  // Development - Update backend URL when ready
   BASE_URL: __DEV__ 
     ? 'http://localhost:3000/api'  // Local development
     : 'https://production-api.com/api',  // Production

@@ -8,8 +8,8 @@ import GoalSettingScreen from '../features/onboarding/screens/GoalSettingScreen'
 import IncomeSetupScreen from '../features/onboarding/screens/IncomeSetupScreen';
 import ExpenseSetupScreen from '../features/onboarding/screens/ExpenseSetupScreen';
 import AllocationSetupScreen from '../features/onboarding/screens/AllocationSetupScreen';
-// import PreferencesSetupScreen from '../features/onboarding/screens/PreferencesSetupScreen';
-// import OnboardingCompleteScreen from '../features/onboarding/screens/OnboardingCompleteScreen';
+import PreferencesSetupScreen from '../features/onboarding/screens/PreferencesSetupScreen';
+import OnboardingCompleteScreen from '../features/onboarding/screens/OnboardingCompleteScreen';
 
 const Stack = createStackNavigator();
 
@@ -28,8 +28,8 @@ const OnboardingNavigator = () => {
       <Stack.Screen name="IncomeSetup" component={IncomeSetupScreen} />
       <Stack.Screen name="ExpenseSetup" component={ExpenseSetupScreen} />
       <Stack.Screen name="AllocationSetup" component={AllocationSetupScreen} />
-      {/* <Stack.Screen name="PreferencesSetup" component={PreferencesSetupScreen} />
-      <Stack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} /> */}
+      <Stack.Screen name="PreferencesSetup" component={PreferencesSetupScreen} />
+      <Stack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} />
     </Stack.Navigator>
   );
 };

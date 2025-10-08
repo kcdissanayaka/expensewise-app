@@ -42,23 +42,34 @@ const SignUpScreen = ({ navigation }) => {
     switch (field) {
       case 'name':
         if (value.trim().length === 0) {
-          error = 'Name is required';
+          error = null; // Don't show error until they start typing
         } else if (value.trim().length < 2) {
           error = 'Name must be at least 2 characters';
+        } else if (value.trim().length > 50) {
+          error = 'Name must be less than 50 characters';
         }
         break;
         
       case 'email':
         const trimmedEmail = value.trim();
-        if (trimmedEmail.length > 0 && !validateEmail(trimmedEmail)) {
+        if (trimmedEmail.length === 0) {
+          error = null; // Don't show error until they start typing
+        } else if (!validateEmail(trimmedEmail)) {
           error = 'Please enter a valid email address';
+        } else if (trimmedEmail.length > 254) {
+          error = 'Email address is too long';
         }
         break;
         
       case 'password':
-        if (value.length > 0 && value.length < 6) {
+        if (value.length === 0) {
+          error = null; // Don't show error until they start typing
+        } else if (value.length < 6) {
           error = 'Password must be at least 6 characters';
+        } else if (value.length > 128) {
+          error = 'Password must be less than 128 characters';
         }
+        
         // Check confirm password if it exists
         if (formData.confirmPassword && value !== formData.confirmPassword) {
           setErrors(prev => ({ ...prev, confirmPassword: 'Passwords do not match' }));
@@ -68,7 +79,9 @@ const SignUpScreen = ({ navigation }) => {
         break;
         
       case 'confirmPassword':
-        if (value.length > 0 && value !== formData.password) {
+        if (value.length === 0) {
+          error = null; // Don't show error until they start typing
+        } else if (value !== formData.password) {
           error = 'Passwords do not match';
         }
         break;
@@ -83,9 +96,12 @@ const SignUpScreen = ({ navigation }) => {
     
     return (
       name.trim().length >= 2 &&
+      name.trim().length <= 50 &&
       email.trim().length > 0 &&
+      email.trim().length <= 254 &&
       validateEmail(email.trim()) &&
       password.length >= 6 &&
+      password.length <= 128 &&
       confirmPassword === password &&
       Object.values(errors).every(error => !error)
     );
@@ -93,8 +109,47 @@ const SignUpScreen = ({ navigation }) => {
 
   // Handle sign up
   const handleSignUp = async () => {
-    if (!isFormValid()) {
-      Alert.alert('Error', 'Please fill in all fields correctly');
+    // Clear any previous errors
+    setErrors({});
+
+    // Validate form before submission
+    const { name, email, password, confirmPassword } = formData;
+    let hasErrors = false;
+
+    if (!name.trim()) {
+      setErrors(prev => ({ ...prev, name: 'Name is required' }));
+      hasErrors = true;
+    } else if (name.trim().length < 2) {
+      setErrors(prev => ({ ...prev, name: 'Name must be at least 2 characters' }));
+      hasErrors = true;
+    }
+
+    if (!email.trim()) {
+      setErrors(prev => ({ ...prev, email: 'Email is required' }));
+      hasErrors = true;
+    } else if (!validateEmail(email.trim())) {
+      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      hasErrors = true;
+    }
+
+    if (!password) {
+      setErrors(prev => ({ ...prev, password: 'Password is required' }));
+      hasErrors = true;
+    } else if (password.length < 6) {
+      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters' }));
+      hasErrors = true;
+    }
+
+    if (!confirmPassword) {
+      setErrors(prev => ({ ...prev, confirmPassword: 'Please confirm your password' }));
+      hasErrors = true;
+    } else if (password !== confirmPassword) {
+      setErrors(prev => ({ ...prev, confirmPassword: 'Passwords do not match' }));
+      hasErrors = true;
+    }
+
+    if (hasErrors) {
+      Alert.alert('Validation Error', 'Please correct the errors in the form');
       return;
     }
 
@@ -102,28 +157,114 @@ const SignUpScreen = ({ navigation }) => {
     
     try {
       const result = await authService.register({
-        email: formData.email,
-        password: formData.password,
-        name: formData.name,
-        currency: 'LKR' // Default currency
+        email: email.trim().toLowerCase(),
+        password: password,
+        name: name.trim(),
+        currency: 'EUR' // Default currency
       });
       
       if (result.success) {
         Alert.alert(
-          'Success',
-          result.message,
+          'Account Created Successfully!',
+          'Welcome to ExpenseWise! You can now log in with your credentials.',
           [
             {
-              text: 'OK',
-              onPress: () => navigation.navigate('Login', { email: formData.email })
+              text: 'Continue to Login',
+              onPress: () => {
+                try {
+                  navigation.navigate('Login', { email: formData.email.trim() });
+                } catch (navError) {
+                  console.error('Navigation error after signup:', navError);
+                  // Fallback navigation
+                  navigation.goBack();
+                }
+              }
             }
           ]
         );
       } else {
-        Alert.alert('Registration Failed', result.message);
+        // Handle specific registration failure reasons
+        const errorMessage = result.message || 'Registration failed';
+        
+        if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('exist')) {
+          setErrors(prev => ({ ...prev, email: 'An account with this email already exists' }));
+          Alert.alert(
+            'Email Already Registered',
+            'An account with this email already exists. Would you like to log in instead?',
+            [
+              {
+                text: 'Go to Login',
+                onPress: () => {
+                  try {
+                    navigation.navigate('Login', { email: formData.email.trim() });
+                  } catch (navError) {
+                    console.error('Navigation error:', navError);
+                    navigation.goBack();
+                  }
+                }
+              },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        } else if (errorMessage.toLowerCase().includes('email')) {
+          setErrors(prev => ({ ...prev, email: errorMessage }));
+        } else if (errorMessage.toLowerCase().includes('password')) {
+          setErrors(prev => ({ ...prev, password: errorMessage }));
+        } else if (errorMessage.toLowerCase().includes('name')) {
+          setErrors(prev => ({ ...prev, name: errorMessage }));
+        } else {
+          Alert.alert('Registration Failed', errorMessage);
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Registration error:', error);
+      
+      // Handle different types of errors
+      if (error.message.includes('network') || error.message.includes('fetch')) {
+        Alert.alert(
+          'Connection Error',
+          'Please check your internet connection and try again.',
+          [
+            { text: 'Retry', onPress: handleSignUp },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else if (error.message.includes('database') || error.message.includes('SQLite')) {
+        Alert.alert(
+          'Database Error',
+          'There was an issue creating your account. Please try again or restart the app.',
+          [
+            { text: 'Retry', onPress: handleSignUp },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else if (error.message.includes('timeout')) {
+        Alert.alert(
+          'Request Timeout',
+          'The registration request took too long. Please try again.',
+          [
+            { text: 'Retry', onPress: handleSignUp },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else if (error.message.includes('validation')) {
+        Alert.alert(
+          'Validation Error',
+          'Please check your information and try again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Generic error handling
+        const errorMessage = error.message || 'An unexpected error occurred during registration';
+        Alert.alert(
+          'Registration Error',
+          errorMessage,
+          [
+            { text: 'Try Again', onPress: handleSignUp },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -131,7 +272,16 @@ const SignUpScreen = ({ navigation }) => {
 
   // Handle back to login
   const handleBackToLogin = () => {
-    navigation.navigate('Login');
+    try {
+      navigation.navigate('Login');
+    } catch (navError) {
+      console.error('Navigation error to Login:', navError);
+      Alert.alert(
+        'Navigation Error',
+        'Unable to navigate to login screen. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   return (
