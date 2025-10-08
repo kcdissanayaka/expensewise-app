@@ -10,13 +10,22 @@ class DatabaseService {
 
   async ensureInitialized() {
     if (this.db) {
-      return true;
+      try {
+        // Test the connection
+        await this.db.getFirstAsync('SELECT 1');
+        return true;
+      } catch (error) {
+        console.warn('Database connection test failed, reinitializing...', error);
+        this.db = null;
+      }
     }
 
     if (this.isInitializing) {
       // Wait for ongoing initialization
-      while (this.isInitializing) {
+      let retries = 0;
+      while (this.isInitializing && retries < 50) {
         await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
       }
       return !!this.db;
     }
@@ -31,19 +40,45 @@ class DatabaseService {
 
     try {
       this.isInitializing = true;
+      console.log('Starting database initialization...');
+      
+      // Close existing connection if any
+      if (this.db) {
+        try {
+          await this.db.closeAsync();
+        } catch (error) {
+          console.warn('Error closing existing database connection:', error);
+        }
+        this.db = null;
+      }
+      
+      // Open database connection
       this.db = await SQLite.openDatabaseAsync('expensewise.db');
+      
+      if (!this.db) {
+        throw new Error('Failed to open database connection');
+      }
+      
+      console.log('Database connection established');
+      
+      // Test the connection immediately
+      await this.db.getFirstAsync('SELECT 1');
+      console.log('Database connection verified');
+      
+      // Create all tables
       await this.createTables();
-      console.log('Database initialized successfully');
+      console.log('Database initialization complete');
       return true;
     } catch (error) {
       console.error('Database initialization failed:', error);
-      return false;
+      this.db = null; // Reset on failure
+      throw error; // Propagate error for proper handling
     } finally {
       this.isInitializing = false;
     }
   }
 
-  // Reset database (for testing purposes)
+  // Reset database 
   async resetDatabase() {
     try {
       if (this.db) {
@@ -256,13 +291,33 @@ class DatabaseService {
         throw new Error('Failed to initialize database');
       }
 
+      if (!this.db) {
+        throw new Error('Database connection is null');
+      }
+
       const result = await this.db.getFirstAsync(
         'SELECT * FROM users WHERE email = ?',
         [email]
       );
+      
       return result;
     } catch (error) {
-      console.error('Error getting user by email:', error);
+      
+      // Try to reinitialize database on error
+      if (error.message.includes('NullPointerException') || error.message.includes('database')) {
+        console.log('Attempting database reinitialization...');
+        this.db = null;
+        const retryResult = await this.ensureInitialized();
+        if (retryResult) {
+          console.log('Retrying query after reinitialization...');
+          const result = await this.db.getFirstAsync(
+            'SELECT * FROM users WHERE email = ?',
+            [email]
+          );
+          return result;
+        }
+      }
+      
       throw error;
     }
   }
@@ -303,19 +358,59 @@ class DatabaseService {
   // Income operations
   async createIncome(userId, incomeData) {
     try {
-      await this.ensureInitialized();
-      if (!this.db) {
-        throw new Error('Database not initialized');
+      console.log('Creating income record...', { userId, incomeData });
+      
+      // Ensure database is initialized
+      const isInitialized = await this.ensureInitialized();
+      if (!isInitialized || !this.db) {
+        throw new Error('Database not initialized or connection failed');
+      }
+      
+      // Validate required data
+      if (!userId || !incomeData) {
+        throw new Error('User ID and income data are required');
       }
       
       const { amount, type, source, startDate, endDate, frequency } = incomeData;
+      
+      // Validate required fields
+      if (!amount || amount <= 0) {
+        throw new Error('Valid income amount is required');
+      }
+      
+      if (!type) {
+        throw new Error('Income type is required');
+      }
+      
+      if (!source) {
+        throw new Error('Income source is required');
+      }
+      
+      console.log('Input validation passed');
+      
+      // Execute database operation
       const result = await this.db.runAsync(
         'INSERT INTO income (user_id, amount, type, source, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, amount, type, source, startDate, endDate || null]
+        [userId, amount, type, source, startDate || null, endDate || null]
       );
-      return { id: result.lastInsertRowId, ...incomeData };
+      
+      console.log('Income record created successfully:', result.lastInsertRowId);
+      
+      return { 
+        id: result.lastInsertRowId, 
+        userId,
+        ...incomeData 
+      };
     } catch (error) {
       console.error('Error creating income:', error);
+      
+      // Re-initialize database if connection was lost
+      if (error.message.includes('database') || error.message.includes('connection')) {
+        console.log('Attempting to re-initialize database...');
+        this.db = null;
+        await this.ensureInitialized();
+      }
+      
       throw error;
     }
   }

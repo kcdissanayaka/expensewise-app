@@ -29,6 +29,12 @@ class AuthService {
   // Store reset code in database
   async storeResetCode(email, code) {
     try {
+      // Ensure database is initialized
+      const initialized = await databaseService.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Database not initialized');
+      }
+
       // Create password_resets table if not exists
       await databaseService.db.execAsync(`
         CREATE TABLE IF NOT EXISTS password_resets (
@@ -100,6 +106,12 @@ class AuthService {
         throw new Error('Invalid email address');
       }
 
+      // Ensure database is initialized
+      const initialized = await databaseService.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Database not initialized');
+      }
+
       // Check if code exists and is valid
       const resetRecord = await databaseService.db.getFirstAsync(`
         SELECT * FROM password_resets 
@@ -151,6 +163,12 @@ class AuthService {
       // Update user password
       await databaseService.updateUserPassword(user.id, hashedPassword);
 
+      // Ensure database is initialized
+      const initialized = await databaseService.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Database not initialized');
+      }
+
       // Mark reset code as used
       await databaseService.db.runAsync(`
         UPDATE password_resets SET used = 1 WHERE email = ? AND code = ?
@@ -175,7 +193,7 @@ class AuthService {
         throw new Error('Database not initialized. Please wait and try again.');
       }
 
-      const { email, password, name, currency = 'LKR' } = userData;
+      const { email, password, name, currency = 'EUR' } = userData;
 
       // Validate input
       if (!email || !password || !name) {
