@@ -15,6 +15,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../../../services';
+import onboardingService from '../../onboarding/services/onboardingService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -67,30 +68,122 @@ const LoginScreen = ({ navigation }) => {
 
   // Handle login
   const handleLogin = async () => {
-    if (!isFormValid()) {
-      Alert.alert('Error', 'Please fill in all fields correctly');
+    // Clear any previous errors
+    setErrors({});
+
+    // Validate form before submission
+    if (!email.trim()) {
+      setErrors(prev => ({ ...prev, email: 'Email is required' }));
+      return;
+    }
+    
+    if (!password) {
+      setErrors(prev => ({ ...prev, password: 'Password is required' }));
+      return;
+    }
+
+    if (!validateEmail(email.trim())) {
+      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters' }));
       return;
     }
 
     setLoading(true);
     
     try {
-      // Current local implementation
-      const result = await authService.login(email, password);
-
+      // Attempt login
+      const result = await authService.login(email.trim().toLowerCase(), password);
+      
       if (result.success) {
-
-      const parent = navigation.getParent?.() || navigation;
-       navigation.reset({
-          index: 0,
-          routes: [{ name: 'Dashboard' }],
-        });
-        return; // stop after navigating (prevents any leftover code from running)
+        // Process any temporary onboarding data that was saved before login
+        try {
+          await onboardingService.processTemporaryData();
+        } catch (tempDataError) {
+          console.warn('Error processing temporary data:', tempDataError);
+          // Don't block login for temporary data processing errors
+        }
+        
+        // Check if user needs onboarding
+        try {
+          const isOnboardingComplete = await onboardingService.isOnboardingComplete();
+          
+          if (!isOnboardingComplete) {
+            // User needs onboarding - navigate to onboarding flow
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Onboarding' }],
+            });
+          } else {
+            // User has completed onboarding - go to dashboard
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Dashboard' }],
+            });
+          }
+        } catch (onboardingError) {
+          console.warn('Error checking onboarding status:', onboardingError);
+          // Default to dashboard if onboarding check fails
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Dashboard' }],
+          });
+        }
       } else {
-        Alert.alert('Login Failed', result.message);
+        // Handle specific login failure reasons
+        const errorMessage = result.message || 'Login failed';
+        
+        if (errorMessage.toLowerCase().includes('email')) {
+          setErrors(prev => ({ ...prev, email: errorMessage }));
+        } else if (errorMessage.toLowerCase().includes('password')) {
+          setErrors(prev => ({ ...prev, password: errorMessage }));
+        } else {
+          Alert.alert('Login Failed', errorMessage);
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Login error:', error);
+      
+      // Handle different types of errors
+      if (error.message.includes('network') || error.message.includes('fetch')) {
+        Alert.alert(
+          'Connection Error',
+          'Please check your internet connection and try again.',
+          [
+            { text: 'Retry', onPress: handleLogin },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else if (error.message.includes('database') || error.message.includes('SQLite')) {
+        Alert.alert(
+          'Database Error',
+          'There was an issue accessing your account data. Please try restarting the app.',
+          [{ text: 'OK' }]
+        );
+      } else if (error.message.includes('timeout')) {
+        Alert.alert(
+          'Request Timeout',
+          'The login request took too long. Please try again.',
+          [
+            { text: 'Retry', onPress: handleLogin },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else {
+        // Generic error handling
+        const errorMessage = error.message || 'An unexpected error occurred during login';
+        Alert.alert(
+          'Login Error',
+          errorMessage,
+          [
+            { text: 'Try Again', onPress: handleLogin },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -98,12 +191,30 @@ const LoginScreen = ({ navigation }) => {
 
   // Handle forgot password
   const handleForgotPassword = () => {
-    navigation.navigate('ForgotPassword');
+    try {
+      navigation.navigate('ForgotPassword');
+    } catch (navError) {
+      console.error('Navigation error to ForgotPassword:', navError);
+      Alert.alert(
+        'Navigation Error',
+        'Unable to open forgot password screen. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   // Handle sign up
   const handleSignUp = () => {
-    navigation.navigate('SignUp');
+    try {
+      navigation.navigate('SignUp');
+    } catch (navError) {
+      console.error('Navigation error to SignUp:', navError);
+      Alert.alert(
+        'Navigation Error',
+        'Unable to open sign up screen. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   return (
@@ -282,7 +393,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#424242',
-    letterSpacing: 1, 
+    letterSpacing: 1,
   },
   formContainer: {
     backgroundColor: '#FFFFFF',

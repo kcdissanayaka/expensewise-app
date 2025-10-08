@@ -1,18 +1,61 @@
 import * as SQLite from 'expo-sqlite';
+import { DEFAULT_DB_CATEGORIES } from '../../constants';
 
+// Database service for ExpenseWise app
 class DatabaseService {
   constructor() {
     this.db = null;
+    this.isInitializing = false;
+  }
+
+  async ensureInitialized() {
+    if (this.db) {
+      return true;
+    }
+
+    if (this.isInitializing) {
+      // Wait for ongoing initialization
+      while (this.isInitializing) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return !!this.db;
+    }
+
+    return await this.initialize();
   }
 
   async initialize() {
+    if (this.isInitializing) {
+      return false;
+    }
+
     try {
+      this.isInitializing = true;
       this.db = await SQLite.openDatabaseAsync('expensewise.db');
       await this.createTables();
       console.log('Database initialized successfully');
       return true;
     } catch (error) {
       console.error('Database initialization failed:', error);
+      return false;
+    } finally {
+      this.isInitializing = false;
+    }
+  }
+
+  // Reset database (for testing purposes)
+  async resetDatabase() {
+    try {
+      if (this.db) {
+        await this.db.closeAsync();
+      }
+      await SQLite.deleteDatabaseAsync('expensewise.db');
+      this.db = await SQLite.openDatabaseAsync('expensewise.db');
+      await this.createTables();
+      console.log('Database reset successfully');
+      return true;
+    } catch (error) {
+      console.error('Database reset failed:', error);
       return false;
     }
   }
@@ -25,7 +68,8 @@ class DatabaseService {
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         name TEXT NOT NULL,
-        currency TEXT DEFAULT 'LKR',
+        currency TEXT DEFAULT 'EUR',
+        financial_goals TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -49,6 +93,7 @@ class DatabaseService {
         amount REAL NOT NULL,
         type TEXT NOT NULL,
         source TEXT,
+        frequency TEXT DEFAULT 'monthly',
         start_date DATE,
         end_date DATE,
         is_active BOOLEAN DEFAULT 1,
@@ -140,36 +185,50 @@ class DatabaseService {
       await this.db.execAsync(table);
     }
 
+    // Add financial_goals column if it doesn't exist (for existing databases)
+    try {
+      await this.db.execAsync(`
+        ALTER TABLE users ADD COLUMN financial_goals TEXT
+      `);
+    } catch (error) {
+      // Column already exists - this is fine
+    }
+
+    // Add frequency column to income table if it doesn't exist
+    try {
+      await this.db.execAsync(`
+        ALTER TABLE income ADD COLUMN frequency TEXT DEFAULT 'monthly'
+      `);
+    } catch (error) {
+      // Column already exists - this is fine
+    }
+
     // Insert default categories
     await this.insertDefaultCategories();
   }
 
   async insertDefaultCategories() {
-    const defaultCategories = [
-      { name: 'Food & Dining', color: '#FF6384', icon: 'restaurant' },
-      { name: 'Transportation', color: '#36A2EB', icon: 'directions-car' },
-      { name: 'Shopping', color: '#FFCE56', icon: 'shopping-cart' },
-      { name: 'Entertainment', color: '#4BC0C0', icon: 'movie' },
-      { name: 'Bills & Utilities', color: '#9966FF', icon: 'receipt' },
-      { name: 'Healthcare', color: '#FF9F40', icon: 'local-hospital' },
-      { name: 'Education', color: '#FF6B6B', icon: 'school' },
-      { name: 'Other', color: '#95A5A6', icon: 'category' }
-    ];
-
-    // Note: These will be inserted when a user is created
-    this.defaultCategories = defaultCategories;
+    // Use constants for consistent category definitions
+    this.defaultCategories = DEFAULT_DB_CATEGORIES;
   }
 
   // User operations
   async createUser(email, passwordHash, name) {
     try {
+      // Ensure database is initialized
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
       const result = await this.db.runAsync(
         'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
         [email, passwordHash, name]
       );
 
       // Create default categories for new user
-      for (const category of this.defaultCategories) {
+      const defaultCategories = DEFAULT_DB_CATEGORIES;
+      for (const category of defaultCategories) {
         await this.db.runAsync(
           'INSERT INTO categories (user_id, name, color, icon) VALUES (?, ?, ?, ?)',
           [result.lastInsertRowId, category.name, category.color, category.icon]
@@ -191,6 +250,12 @@ class DatabaseService {
 
   async getUserByEmail(email) {
     try {
+      // Ensure database is initialized
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
       const result = await this.db.getFirstAsync(
         'SELECT * FROM users WHERE email = ?',
         [email]
@@ -204,6 +269,12 @@ class DatabaseService {
 
   async getUserById(id) {
     try {
+      // Ensure database is initialized
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
       const result = await this.db.getFirstAsync(
         'SELECT * FROM users WHERE id = ?',
         [id]
@@ -215,14 +286,13 @@ class DatabaseService {
     }
   }
 
-  // ADD THIS METHOD FOR PASSWORD RESET
+  // Update user password
   async updateUserPassword(userId, newHashedPassword) {
     try {
       const result = await this.db.runAsync(
         'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [newHashedPassword, userId]
       );
-      console.log('Password updated successfully for user:', userId);
       return result;
     } catch (error) {
       console.error('Error updating password:', error);
@@ -233,10 +303,15 @@ class DatabaseService {
   // Income operations
   async createIncome(userId, incomeData) {
     try {
-      const { amount, type, source, startDate, endDate } = incomeData;
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
+      const { amount, type, source, startDate, endDate, frequency } = incomeData;
       const result = await this.db.runAsync(
         'INSERT INTO income (user_id, amount, type, source, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, amount, type, source, startDate, endDate]
+        [userId, amount, type, source, startDate, endDate || null]
       );
       return { id: result.lastInsertRowId, ...incomeData };
     } catch (error) {
@@ -247,6 +322,11 @@ class DatabaseService {
 
   async getIncomeByUser(userId) {
     try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
       const result = await this.db.getAllAsync(
         'SELECT * FROM income WHERE user_id = ? AND is_archived = 0 ORDER BY created_at DESC',
         [userId]
@@ -261,6 +341,11 @@ class DatabaseService {
   // Expense operations
   async createExpense(userId, expenseData) {
     try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
       const { categoryId, amount, title, description, dueDate, status, type } = expenseData;
       const result = await this.db.runAsync(
         'INSERT INTO expenses (user_id, category_id, amount, title, description, due_date, status, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -275,6 +360,11 @@ class DatabaseService {
 
   async getExpensesByUser(userId, filters = {}) {
     try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
       let query = `
         SELECT e.*, c.name as category_name, c.color as category_color 
         FROM expenses e 
@@ -312,6 +402,11 @@ class DatabaseService {
   // Categories operations
   async getCategoriesByUser(userId) {
     try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
       const result = await this.db.getAllAsync(
         'SELECT * FROM categories WHERE user_id = ? AND is_active = 1 ORDER BY name ASC',
         [userId]
@@ -326,9 +421,19 @@ class DatabaseService {
   // Dashboard totals
   async getDashboardTotals(userId, month = null, year = null) {
     try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
       const currentDate = new Date();
       const targetMonth = month || currentDate.getMonth() + 1;
       const targetYear = year || currentDate.getFullYear();
+
+      // Validate that we have valid month and year values
+      if (!targetMonth || !targetYear || isNaN(targetMonth) || isNaN(targetYear)) {
+        throw new Error('Invalid month or year parameters');
+      }
 
       // Get total income for the month
       const incomeResult = await this.db.getFirstAsync(`
@@ -337,7 +442,7 @@ class DatabaseService {
         WHERE user_id = ? AND is_archived = 0
         AND strftime('%m', created_at) = ? 
         AND strftime('%Y', created_at) = ?
-      `, [userId, targetMonth.toString().padStart(2, '0'), targetYear.toString()]);
+      `, [userId, String(targetMonth).padStart(2, '0'), String(targetYear)]);
 
       // Get total expenses by status for the month
       const expenseResult = await this.db.getAllAsync(`
@@ -347,7 +452,7 @@ class DatabaseService {
         AND strftime('%m', due_date) = ? 
         AND strftime('%Y', due_date) = ?
         GROUP BY status
-      `, [userId, targetMonth.toString().padStart(2, '0'), targetYear.toString()]);
+      `, [userId, String(targetMonth).padStart(2, '0'), String(targetYear)]);
 
       const expenses = {
         pending: 0,
@@ -375,6 +480,137 @@ class DatabaseService {
       };
     } catch (error) {
       console.error('Error getting dashboard totals:', error);
+      throw error;
+    }
+  }
+
+  // Get allocation data for user
+  async getAllocationsByUser(userId) {
+    try {
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
+      const result = await this.db.getAllAsync(`
+        SELECT 
+          at.id as template_id,
+          at.name as template_name,
+          ab.id as bucket_id,
+          ab.name as bucket_name,
+          ab.percentage,
+          ab.target_amount,
+          ab.is_active
+        FROM allocation_templates at
+        LEFT JOIN allocation_buckets ab ON at.id = ab.template_id
+        WHERE at.user_id = ? AND at.is_active = 1
+        ORDER BY at.id, ab.percentage DESC
+      `, [userId]);
+
+      // Group by templates
+      const templates = {};
+      result.forEach(row => {
+        if (!templates[row.template_id]) {
+          templates[row.template_id] = {
+            id: row.template_id,
+            name: row.template_name,
+            buckets: []
+          };
+        }
+        
+        if (row.bucket_id) {
+          templates[row.template_id].buckets.push({
+            id: row.bucket_id,
+            name: row.bucket_name,
+            percentage: row.percentage,
+            target_amount: row.target_amount,
+            is_active: row.is_active
+          });
+        }
+      });
+
+      return Object.values(templates);
+    } catch (error) {
+      console.error('Error getting allocations by user:', error);
+      throw error;
+    }
+  }
+
+  // Create allocation (budget allocation)
+  async createAllocation(allocationData) {
+    try {
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
+      const { userId, categoryId, percentage, budgetLimit } = allocationData;
+      
+      const result = await this.db.runAsync(`
+        INSERT INTO allocation_templates (user_id, name, is_active) 
+        VALUES (?, ?, 1)
+      `, [userId, `Budget Allocation ${Date.now()}`]);
+
+      const templateId = result.lastInsertRowId;
+
+      // Create allocation bucket
+      await this.db.runAsync(`
+        INSERT INTO allocation_buckets (template_id, name, percentage, target_amount, is_active)
+        VALUES (?, ?, ?, ?, 1)
+      `, [templateId, `Category ${categoryId}`, percentage, budgetLimit]);
+
+      return { id: templateId, ...allocationData };
+    } catch (error) {
+      console.error('Error creating allocation:', error);
+      throw error;
+    }
+  }
+
+  // Update allocation
+  async updateAllocation(allocationId, allocationData) {
+    try {
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
+      const { categoryId, percentage, budgetLimit } = allocationData;
+
+      // Update the allocation bucket
+      await this.db.runAsync(`
+        UPDATE allocation_buckets 
+        SET name = ?, percentage = ?, target_amount = ?
+        WHERE template_id = ?
+      `, [`Category ${categoryId}`, percentage, budgetLimit, allocationId]);
+
+      return { id: allocationId, ...allocationData };
+    } catch (error) {
+      console.error('Error updating allocation:', error);
+      throw error;
+    }
+  }
+
+  // Delete allocation
+  async deleteAllocation(allocationId) {
+    try {
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+        throw new Error('Failed to initialize database');
+      }
+
+      // Delete allocation buckets first (foreign key constraint)
+      await this.db.runAsync(`
+        DELETE FROM allocation_buckets WHERE template_id = ?
+      `, [allocationId]);
+
+      // Delete allocation template
+      await this.db.runAsync(`
+        DELETE FROM allocation_templates WHERE id = ?
+      `, [allocationId]);
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting allocation:', error);
       throw error;
     }
   }
