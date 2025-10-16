@@ -28,32 +28,43 @@ const AuthNavigator = () => {
 
   const checkAuthenticationState = async () => {
     try {
+      console.log('Starting authentication check...');
+      
+      // First, try to restore session from AsyncStorage
+      const restoredUser = await authService.restoreSession();
+      console.log('Restored user:', restoredUser);
+      
       // Check if user is logged in
       const isLoggedIn = await authService.isLoggedIn();
+      console.log('Is logged in:', isLoggedIn);
+
+      // Check current token and user data
+      const token = await authService.getToken();
+      const currentUser = authService.getCurrentUser();
+      console.log('Token exists:', !!token);
+      console.log('Current user exists:', !!currentUser);
       
       if (!isLoggedIn) {
-        // Not logged in, show login screen
+        console.log('Not logged in - clearing onboarding flags and going to Login');
+        // Not logged in, clear any onboarding completion flags and show login screen
+        await AsyncStorage.removeItem('onboarding_completed');
+        await AsyncStorage.removeItem('onboarding_current_step');
         setInitialRoute('Login');
       } else {
+        console.log('User is logged in - checking onboarding status');
         // User is logged in, check if onboarding is complete
         const isOnboardingComplete = await onboardingService.isOnboardingComplete();
-        
-        if (!isOnboardingComplete) {
-          // Process any temporary data that was saved during onboarding
-          await onboardingService.processTemporaryData();
-          
-          // Check if user has gone through onboarding flow
-          const onboardingCompleted = await AsyncStorage.getItem('onboarding_completed');
-          
-          if (!onboardingCompleted) {
-            // User hasn't completed onboarding, go to onboarding
-            setInitialRoute('Onboarding');
-          } else {
-            // Onboarding marked as complete but data missing, go to dashboard anyway
-            setInitialRoute('Dashboard');
-          }
+        console.log('Onboarding complete:', isOnboardingComplete);
+
+        if (isOnboardingComplete) {
+          console.log('Going to Dashboard');
+          // Onboarding is complete, go directly to dashboard
+          setInitialRoute('Dashboard');
         } else {
-          // Everything is complete, go to dashboard
+          console.log('Existing user without onboarding flag - marking as complete and going to Dashboard');
+          // For existing logged-in users, mark onboarding as complete and go to dashboard
+          // This handles cases where users logged in before onboarding tracking was implemented
+          await onboardingService.completeOnboarding();
           setInitialRoute('Dashboard');
         }
       }

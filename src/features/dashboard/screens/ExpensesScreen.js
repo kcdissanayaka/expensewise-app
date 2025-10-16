@@ -97,6 +97,43 @@ const ExpensesScreen = ({ navigation }) => {
     }
   };
 
+  const handleConfirmExpense = async (expenseId) => {
+    try {
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) return;
+
+      // Update expense status to 'Confirmed'
+      await databaseService.db.runAsync(
+        'UPDATE expenses SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+        ['Confirmed', expenseId, currentUser.id]
+      );
+
+      // Reload expenses to reflect the change
+      await loadExpenses();
+      Alert.alert('Success', 'Expense confirmed successfully!');
+    } catch (error) {
+      console.error('Error confirming expense:', error);
+      Alert.alert('Error', 'Failed to confirm expense');
+    }
+  };
+
+  const handleExpenseAction = (expense) => {
+    if (expense.status === 'Pending') {
+      Alert.alert(
+        'Confirm Expense',
+        `Do you want to confirm "${expense.title}" for ${formatCurrency(expense.amount)}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Confirm', 
+            onPress: () => handleConfirmExpense(expense.id),
+            style: 'default'
+          }
+        ]
+      );
+    }
+  };
+
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
 
   const getMonthlyTotal = () => {
@@ -114,13 +151,26 @@ const ExpensesScreen = ({ navigation }) => {
   const renderExpenseCard = (expense, index) => {
     const expenseDate = new Date(expense.created_at);
     const isToday = expenseDate.toDateString() === new Date().toDateString();
+    const isPending = expense.status === 'Pending';
 
     return (
-      <View key={index} style={[styles.expenseCard, { backgroundColor: theme.colors.card }]}>
+      <TouchableOpacity 
+        key={index} 
+        style={[
+          styles.expenseCard, 
+          { 
+            backgroundColor: theme.colors.card,
+            opacity: isPending ? 0.9 : 1.0
+          }
+        ]}
+        onPress={() => handleExpenseAction(expense)}
+        disabled={!isPending}
+      >
         <View style={styles.expenseHeader}>
           <View style={styles.expenseInfo}>
             <Text style={[styles.expenseTitle, { color: theme.colors.text }]}>
               {expense.title}
+              {isPending && <Text style={{ color: '#FFA500' }}> (Tap to confirm)</Text>}
             </Text>
             <Text style={[styles.expenseCategory, { color: theme.colors.textSecondary }]}>
               {expense.category_name}
@@ -153,7 +203,7 @@ const ExpensesScreen = ({ navigation }) => {
             {expense.type}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

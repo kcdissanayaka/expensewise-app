@@ -9,6 +9,7 @@ import ExpensesScreen from '../screens/ExpensesScreen';
 import BudgetScreen from '../screens/BudgetScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import IncomeScreen from '../screens/IncomeScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -54,7 +55,17 @@ const TabNavigator = () => {
           ),
         }}
       />
-      
+
+      <Tab.Screen
+        name="Income"
+        component={IncomeScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon icon="💵" color={color} size={size} />
+          ),
+        }}
+      />
+
       <Tab.Screen
         name="Budget"
         component={BudgetScreen}
