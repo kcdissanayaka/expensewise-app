@@ -40,7 +40,6 @@ class DatabaseService {
 
     try {
       this.isInitializing = true;
-      console.log('Starting database initialization...');
       
       // Close existing connection if any
       if (this.db) {
@@ -59,15 +58,11 @@ class DatabaseService {
         throw new Error('Failed to open database connection');
       }
       
-      console.log('Database connection established');
-      
       // Test the connection immediately
       await this.db.getFirstAsync('SELECT 1');
-      console.log('Database connection verified');
       
       // Create all tables
       await this.createTables();
-      console.log('Database initialization complete');
       return true;
     } catch (error) {
       console.error('Database initialization failed:', error);
@@ -87,7 +82,6 @@ class DatabaseService {
       await SQLite.deleteDatabaseAsync('expensewise.db');
       this.db = await SQLite.openDatabaseAsync('expensewise.db');
       await this.createTables();
-      console.log('Database reset successfully');
       return true;
     } catch (error) {
       console.error('Database reset failed:', error);
@@ -133,6 +127,9 @@ class DatabaseService {
         end_date DATE,
         is_active BOOLEAN DEFAULT 1,
         is_archived BOOLEAN DEFAULT 0,
+        needs_sync BOOLEAN DEFAULT 1,
+        api_id TEXT,
+        synced_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
@@ -150,6 +147,9 @@ class DatabaseService {
         status TEXT DEFAULT 'Pending',
         type TEXT DEFAULT 'Regular',
         is_archived BOOLEAN DEFAULT 0,
+        needs_sync BOOLEAN DEFAULT 1,
+        api_id TEXT,
+        synced_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id),
@@ -238,13 +238,25 @@ class DatabaseService {
       // Column already exists - this is fine
     }
 
-    // Insert default categories
-    await this.insertDefaultCategories();
-  }
+    // Add sync columns to expenses table if they don't exist
+    try {
+      await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN needs_sync BOOLEAN DEFAULT 1`);
+      await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN api_id TEXT`);
+      await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN synced_at DATETIME`);
+    } catch (error) {
+      // Columns already exist - this is fine
+    }
 
-  async insertDefaultCategories() {
-    // Use constants for consistent category definitions
-    this.defaultCategories = DEFAULT_DB_CATEGORIES;
+    // Add sync columns to income table if they don't exist
+    try {
+      await this.db.execAsync(`ALTER TABLE income ADD COLUMN needs_sync BOOLEAN DEFAULT 1`);
+      await this.db.execAsync(`ALTER TABLE income ADD COLUMN api_id TEXT`);
+      await this.db.execAsync(`ALTER TABLE income ADD COLUMN synced_at DATETIME`);
+    } catch (error) {
+      // Columns already exist - this is fine
+    }
+
+    // Insert default categories
   }
 
   // User operations
@@ -305,11 +317,9 @@ class DatabaseService {
       
       // Try to reinitialize database on error
       if (error.message.includes('NullPointerException') || error.message.includes('database')) {
-        console.log('Attempting database reinitialization...');
         this.db = null;
         const retryResult = await this.ensureInitialized();
         if (retryResult) {
-          console.log('Retrying query after reinitialization...');
           const result = await this.db.getFirstAsync(
             'SELECT * FROM users WHERE email = ?',
             [email]
@@ -356,10 +366,9 @@ class DatabaseService {
   }
 
   // Income operations
+  // Income operations - LOCAL-FIRST with sync
   async createIncome(userId, incomeData) {
     try {
-      console.log('Creating income record...', { userId, incomeData });
-      
       // Ensure database is initialized
       const isInitialized = await this.ensureInitialized();
       if (!isInitialized || !this.db) {
@@ -386,27 +395,29 @@ class DatabaseService {
         throw new Error('Income source is required');
       }
       
-      console.log('Input validation passed');
-      
-      // Execute database operation
+      // Save to local SQLite immediately
       const result = await this.db.runAsync(
-        'INSERT INTO income (user_id, amount, type, source, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, amount, type, source, startDate || null, endDate || null]
+        'INSERT INTO income (user_id, amount, type, source, start_date, end_date, frequency, needs_sync, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+        [userId, amount, type, source, startDate || null, endDate || null, frequency || 'monthly', 1]
       );
       
-      console.log('Income record created successfully:', result.lastInsertRowId);
-      
-      return { 
+      const newIncome = { 
         id: result.lastInsertRowId, 
         userId,
-        ...incomeData 
+        ...incomeData,
+        needs_sync: true
       };
+      
+      // Queue for background sync
+      const { default: syncManager } = await import('../sync/syncManager');
+      syncManager.queueForSync('income', 'create', newIncome);
+      
+      return newIncome;
     } catch (error) {
       console.error('Error creating income:', error);
       
       // Re-initialize database if connection was lost
       if (error.message.includes('database') || error.message.includes('connection')) {
-        console.log('Attempting to re-initialize database...');
         this.db = null;
         await this.ensureInitialized();
       }
@@ -433,7 +444,7 @@ class DatabaseService {
     }
   }
 
-  // Expense operations
+  // Expense operations - LOCAL-FIRST with sync
   async createExpense(userId, expenseData) {
     try {
       await this.ensureInitialized();
@@ -442,11 +453,25 @@ class DatabaseService {
       }
       
       const { categoryId, amount, title, description, dueDate, status, type } = expenseData;
+      
+      // Save to local SQLite immediately
       const result = await this.db.runAsync(
-        'INSERT INTO expenses (user_id, category_id, amount, title, description, due_date, status, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, categoryId, amount, title, description, dueDate, status || 'Pending', type || 'Regular']
+        'INSERT INTO expenses (user_id, category_id, amount, title, description, due_date, status, type, needs_sync, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+        [userId, categoryId, amount, title, description, dueDate, status || 'Pending', type || 'Regular', 1]
       );
-      return { id: result.lastInsertRowId, ...expenseData };
+      
+      const newExpense = { 
+        id: result.lastInsertRowId, 
+        userId,
+        ...expenseData,
+        needs_sync: true
+      };
+      
+      // Queue for background sync
+      const { default: syncManager } = await import('../sync/syncManager');
+      syncManager.queueForSync('expense', 'create', newExpense);
+      
+      return newExpense;
     } catch (error) {
       console.error('Error creating expense:', error);
       throw error;
@@ -726,6 +751,91 @@ class DatabaseService {
     } catch (error) {
       console.error('Database connection test failed:', error);
       return false;
+    }
+  }
+
+  // SYNC HELPER METHODS
+
+  // Mark record as synced with API
+  async markAsSynced(table, localId, apiId = null) {
+    try {
+      await this.ensureInitialized();
+      
+      const updateQuery = apiId 
+        ? `UPDATE ${table} SET needs_sync = 0, synced_at = CURRENT_TIMESTAMP, api_id = ? WHERE id = ?`
+        : `UPDATE ${table} SET needs_sync = 0, synced_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      
+      const params = apiId ? [apiId, localId] : [localId];
+      
+      await this.db.runAsync(updateQuery, params);
+    } catch (error) {
+      console.error('Error marking as synced:', error);
+      throw error;
+    }
+  }
+
+  // Get unsynced records for a table
+  async getUnsyncedRecords(table, userId) {
+    try {
+      await this.ensureInitialized();
+      
+      const result = await this.db.getAllAsync(
+        `SELECT * FROM ${table} WHERE user_id = ? AND needs_sync = 1 ORDER BY created_at ASC`,
+        [userId]
+      );
+      
+      return result || [];
+    } catch (error) {
+      console.error(`Error getting unsynced ${table}:`, error);
+      return [];
+    }
+  }
+
+  // Update expense - LOCAL-FIRST with sync
+  async updateExpense(expenseId, updateData) {
+    try {
+      await this.ensureInitialized();
+      
+      const { amount, title, description, categoryId, status } = updateData;
+      
+      // Update locally immediately
+      await this.db.runAsync(
+        'UPDATE expenses SET amount = ?, title = ?, description = ?, category_id = ?, status = ?, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [amount, title, description, categoryId, status, expenseId]
+      );
+      
+      // Queue for sync
+      const { default: syncManager } = await import('../sync/syncManager');
+      syncManager.queueForSync('expense', 'update', { id: expenseId, ...updateData });
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      throw error;
+    }
+  }
+
+  // Delete expense - LOCAL-FIRST with sync
+  async deleteExpense(expenseId) {
+    try {
+      await this.ensureInitialized();
+      
+      // Get expense data before deletion (for API sync)
+      const expense = await this.db.getFirstAsync('SELECT * FROM expenses WHERE id = ?', [expenseId]);
+      
+      // Delete locally immediately
+      await this.db.runAsync('DELETE FROM expenses WHERE id = ?', [expenseId]);
+      
+      // Queue for sync (if it was previously synced)
+      if (expense && expense.api_id) {
+        const { default: syncManager } = await import('../sync/syncManager');
+        syncManager.queueForSync('expense', 'delete', expense);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      throw error;
     }
   }
 }

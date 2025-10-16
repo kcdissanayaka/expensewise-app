@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Dimensions
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../../app/providers/ThemeProvider';
 import authService from '../../../services/auth/authService';
 import databaseService from '../../../services/database/databaseService';
@@ -242,19 +243,38 @@ const DashboardScreen = ({ navigation }) => {
   const handleResetDatabase = async () => {
     Alert.alert(
       'Reset Database',
-      'This will delete ALL data including users, expenses, and settings. Are you sure?',
+      'This will delete ALL data including users, expenses, settings, and local storage. Are you sure?',
       [
         {
           text: 'Cancel',
           style: 'cancel',
         },
         {
-          text: 'Yes, Reset',
+          text: 'Yes, Reset Everything',
           style: 'destructive',
           onPress: async () => {
             try {
+              // 1. Reset the SQLite database
               await databaseService.resetDatabase();
-              Alert.alert('Success', 'Database reset successfully! App will restart.', [
+              
+              // 2. Clear all AsyncStorage data (authentication, onboarding, user data)
+              const keysToRemove = [
+                '@ExpenseWise:authToken',
+                '@ExpenseWise:userData',
+                'onboarding_completed',
+                'onboarding_current_step',
+                'user_financial_goals',
+                'temp_income_data',
+                'user_income_data'
+              ];
+              await AsyncStorage.multiRemove(keysToRemove);
+              
+              // 3. Clear auth service state
+              await authService.clearAuthData();
+              
+              console.log('Database and local storage reset successfully');
+              
+              Alert.alert('Success', 'All data has been reset successfully! App will restart.', [
                 {
                   text: 'OK',
                   onPress: () => {
@@ -266,8 +286,8 @@ const DashboardScreen = ({ navigation }) => {
                 }
               ]);
             } catch (error) {
-              console.error('Database reset error:', error);
-              Alert.alert('Error', 'Failed to reset database');
+              console.error('❌ Reset error:', error);
+              Alert.alert('Error', 'Failed to reset data completely. Some data may remain.');
             }
           },
         },
