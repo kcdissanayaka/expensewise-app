@@ -365,7 +365,6 @@ class DatabaseService {
     }
   }
 
-  // Income operations
   // Income operations - LOCAL-FIRST with sync
   async createIncome(userId, incomeData) {
     try {
