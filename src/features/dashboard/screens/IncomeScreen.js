@@ -36,9 +36,9 @@ const IncomeScreen = ({ navigation }) => {
     loadIncomes();
   }, []);
 
-  // Inside your IncomeScreen component, add this:
+
 useEffect(() => {
-  // Temporary fix - run this once to clear broken data
+  // Temporary fix - clear broken data
   const resetBrokenData = async () => {
     try {
       console.log('Cleaning up broken sync data...');
