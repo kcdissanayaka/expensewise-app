@@ -1,5 +1,5 @@
 // Expense Feature Exports
-export { default as ExpenseListScreen } from './screens/ExpenseListScreen';
+
 export { default as AddExpenseScreen } from './screens/AddExpenseScreen';
 export { default as ExpenseDetailScreen } from './screens/ExpenseDetailScreen';
 

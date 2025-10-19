@@ -15,7 +15,7 @@ export const CURRENCIES = {
   GBP: '£'
 };
 
-export const DEFAULT_DB_CATEGORIES = [
+export const  DEFAULT_DB_CATEGORIES = [
   { name: 'Food & Dining', color: '#FF6B6B', icon: 'restaurant' },
   { name: 'Transportation', color: '#4ECDC4', icon: 'car' },
   { name: 'Shopping', color: '#45B7D1', icon: 'shopping-bag' },
