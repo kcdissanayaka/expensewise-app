@@ -533,32 +533,49 @@ async fixMissingApiIds(userId) {
   }
 }
 
-  // Delete income - LOCAL-FIRST with sync
-  async deleteIncome(incomeId) {
-    try {
-      await this.ensureInitialized();
-      if (!this.db) {
-        throw new Error('Database not initialized');
-      }
-      
-      // Get income data before deletion (for API sync)
-      const income = await this.db.getFirstAsync('SELECT * FROM income WHERE id = ?', [incomeId]);
-      
-      // Delete locally immediately
-      await this.db.runAsync('DELETE FROM income WHERE id = ?', [incomeId]);
-      
-      // Queue for sync (if it was previously synced)
-      if (income && income.api_id) {
-        const { default: syncManager } = await import('../sync/syncManager');
-        syncManager.queueForSync('income', 'delete', income);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error deleting income:', error);
-      throw error;
+// Delete income - LOCAL-FIRST with sync
+async deleteIncome(incomeId) {
+  try {
+    await this.ensureInitialized();
+    if (!this.db) {
+      throw new Error('Database not initialized');
     }
+    
+    // Get income data before deletion (for API sync) - FIXED QUERY
+    const income = await this.db.getFirstAsync(
+      'SELECT * FROM income WHERE id = ?', 
+      [incomeId]
+    );
+    
+    if (!income) {
+      console.log('Income not found for deletion:', incomeId);
+      return false;
+    }
+    
+    console.log('Deleting income with data:', {
+      id: income.id,
+      api_id: income.api_id,
+      source: income.source
+    });
+    
+    // Delete locally immediately
+    await this.db.runAsync('DELETE FROM income WHERE id = ?', [incomeId]);
+    
+    // Queue for sync (if it was previously synced OR if it has api_id)
+    if (income && income.api_id) {
+      const { default: syncManager } = await import('../sync/syncManager');
+      syncManager.queueForSync('income', 'delete', income);
+      console.log('Queued income for deletion sync:', income.api_id);
+    } else {
+      console.log('Income not queued for sync - no api_id found:', incomeId);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error deleting income:', error);
+    throw error;
   }
+}
 
   
 
