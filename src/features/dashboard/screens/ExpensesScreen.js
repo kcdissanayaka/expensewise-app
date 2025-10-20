@@ -9,7 +9,8 @@ import {
   RefreshControl,
   Alert,
   Modal,
-  TextInput
+  TextInput,
+  Switch,
 } from 'react-native';
 import { useTheme } from '../../../app/providers/ThemeProvider';
 import { databaseService } from '../../../services';
@@ -26,7 +27,11 @@ const ExpensesScreen = ({ navigation }) => {
     title: '',
     amount: '',
     categoryId: '',
-    description: ''
+    description: '',
+    dueDate: '',            // optional date string: YYYY-MM-DD
+    isRecurring: false,     // repeat monthly?
+    recurrenceEnd: '',      // YYYY-MM-DD (until)
+    isActive: 1,            // 1=show, 0=stop showing
   });
 
   useEffect(() => {
@@ -50,17 +55,48 @@ const ExpensesScreen = ({ navigation }) => {
     }
   };
 
+  // const loadCategories = async () => {
+  //   try {
+  //     const currentUser = authService.getCurrentUser();
+  //     console.log('[CAT] currentUser = ', currentUser);
+  //     if (currentUser) {
+  //       const categoryData = await databaseService.getCategoriesByUser(currentUser.id);
+  //           console.log('[CAT] fetched from DB = ', categoryData?.length, categoryData?.slice(0,3));
+  //       setCategories(categoryData.filter(cat => cat.is_active));
+  //     }
+  //   } catch (error) {
+  //     console.error('Error loading categories:', error);
+  //   }
+  // };
+
   const loadCategories = async () => {
-    try {
-      const currentUser = authService.getCurrentUser();
-      if (currentUser) {
-        const categoryData = await databaseService.getCategoriesByUser(currentUser.id);
-        setCategories(categoryData.filter(cat => cat.is_active));
-      }
-    } catch (error) {
-      console.error('Error loading categories:', error);
+  try {
+    const currentUser = authService.getCurrentUser();
+    console.log('[CAT] currentUser = ', currentUser);
+
+    if (!currentUser) {
+      // If not logged in, you can redirect, or just bail gracefully
+      setCategories([]);
+      return;
     }
-  };
+
+    let categoryData = await databaseService.getCategoriesByUser(currentUser.id);
+    console.log('[CAT] fetched from DB = ', categoryData?.length);
+
+    // If no categories, seed defaults once for this user
+    if (!categoryData || categoryData.length === 0) {
+      await databaseService.createDefaultCategoriesForUser(currentUser.id);
+      categoryData = await databaseService.getCategoriesByUser(currentUser.id);
+      console.log('[CAT] after seeding = ', categoryData?.length);
+    }
+
+    // Be tolerant with SQLite boolean values (0/1 or true/false)
+    setCategories((categoryData || []).filter(cat => Number(cat.is_active) === 1));
+  } catch (error) {
+    console.error('Error loading categories:', error);
+    setCategories([]); // fail-safe
+  }
+};
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -84,10 +120,15 @@ const ExpensesScreen = ({ navigation }) => {
         title: newExpense.title,
         description: newExpense.description,
         type: 'Manual',
-        status: 'Pending'
+        status: 'Pending',
+        dueDate: newExpense.dueDate || null,
+        isRecurring: !!newExpense.isRecurring,
+        recurrenceEnd: newExpense.recurrenceEnd || null,
+        isActive: newExpense.isActive ? 1 : 0,
       });
 
-      setNewExpense({ title: '', amount: '', categoryId: '', description: '' });
+      setNewExpense({ title: '', amount: '', categoryId: '', description: '',dueDate: '',
+         isRecurring: false, recurrenceEnd: '', isActive: 1 });
       setModalVisible(false);
       await loadExpenses();
       Alert.alert('Success', 'Expense added successfully!');
@@ -148,6 +189,17 @@ const ExpensesScreen = ({ navigation }) => {
       .reduce((total, expense) => total + expense.amount, 0);
   };
 
+  const handleStopExpense = async (id) => {
+  try {
+    await databaseService.stopExpense(id);
+    await loadExpenses();
+    Alert.alert('Stopped', 'This expense will no longer be shown.');
+  } catch (error) {
+    console.error('Stop expense error:', error);
+    Alert.alert('Error', 'Failed to stop this expense.');
+  }
+};
+
   const renderExpenseCard = (expense, index) => {
     const expenseDate = new Date(expense.created_at);
     const isToday = expenseDate.toDateString() === new Date().toDateString();
@@ -199,9 +251,13 @@ const ExpensesScreen = ({ navigation }) => {
           ]}>
             <Text style={styles.statusText}>{expense.status}</Text>
           </View>
-          <Text style={[styles.expenseType, { color: theme.colors.textSecondary }]}>
-            {expense.type}
-          </Text>
+
+          {/* 🟥 Add Stop button here */}
+          <TouchableOpacity onPress={() => handleStopExpense(expense.id)}>
+            <Text style={{ color: '#FF4444', textDecorationLine: 'underline', fontSize: 12 }}>
+              Stop
+            </Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -216,11 +272,15 @@ const ExpensesScreen = ({ navigation }) => {
     >
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-            Add New Expense
-          </Text>
-
-          <View style={styles.inputGroup}>
+            <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 40 }}
+          >
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Add New Expense
+              </Text>
+                        <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Title *</Text>
             <TextInput
               style={[styles.input, { 
@@ -253,7 +313,7 @@ const ExpensesScreen = ({ navigation }) => {
 
           <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+            {/* <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
               {categories.map((category) => (
                 <TouchableOpacity
                   key={category.id}
@@ -280,7 +340,44 @@ const ExpensesScreen = ({ navigation }) => {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </ScrollView> */}
+            <View style={styles.inputGroup}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+                  {categories.map((category) => (
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.categoryChip,
+                        {
+                          backgroundColor:
+                            newExpense.categoryId === (category.id ? category.id.toString() : '')
+                              ? theme.colors.primary
+                              : theme.colors.card,
+                          borderColor: theme.colors.border
+                        }
+                      ]}
+                      onPress={() =>
+                        setNewExpense(prev => ({
+                          ...prev,
+                          categoryId: category.id ? category.id.toString() : ''
+                        }))
+                      }>
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          {
+                            color:
+                              newExpense.categoryId === (category.id ? category.id.toString() : '')
+                                ? '#FFFFFF'
+                                : theme.colors.text
+                          }
+                        ]}>
+                        {category.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
           </View>
 
           <View style={styles.inputGroup}>
@@ -298,6 +395,49 @@ const ExpensesScreen = ({ navigation }) => {
               multiline
               numberOfLines={3}
             />
+            {/* Due Date (YYYY-MM-DD) */}
+            <View style= {styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Due date (YYYY-MM-DD)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border, color: theme.colors.text }]}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newExpense.dueDate}
+                onChangeText={(text) => setNewExpense(prev => ({ ...prev, dueDate: text.trim() }))}
+              />
+            </View>
+
+            {/* Recurs monthly */}
+            <View style={[styles.inputGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Repeats monthly</Text>
+              <Switch
+                value={!!newExpense.isRecurring}
+                onValueChange={(v) => setNewExpense(prev => ({ ...prev, isRecurring: v }))}
+              />
+            </View>
+
+            {/* Until (only if recurring) */}
+            {newExpense.isRecurring && (
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Until (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={newExpense.recurrenceEnd}
+                  onChangeText={(text) => setNewExpense(prev => ({ ...prev, recurrenceEnd: text.trim() }))}
+                />
+              </View>
+            )}
+
+            {/* Active toggle */}
+            <View style={[styles.inputGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Show this expense</Text>
+              <Switch
+                value={!!newExpense.isActive}
+                onValueChange={(v) => setNewExpense(prev => ({ ...prev, isActive: v ? 1 : 0 }))}
+              />
+            </View>
           </View>
 
           <View style={styles.modalActions}>
@@ -309,12 +449,13 @@ const ExpensesScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.modalButton, styles.addButton, { backgroundColor: theme.colors.primary }]}
+              style={[styles.modalButton, styles.modalPrimaryButton, { backgroundColor: theme.colors.primary }]}
               onPress={handleAddExpense}
             >
               <Text style={styles.addButtonText}>Add Expense</Text>
             </TouchableOpacity>
           </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -346,7 +487,7 @@ const ExpensesScreen = ({ navigation }) => {
         </View>
         
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+          style={[styles.headerAddButton, { backgroundColor: theme.colors.primary }]}
           onPress={() => setModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Add</Text>
@@ -414,7 +555,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
-  addButton: {
+  headerAddButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -423,6 +564,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  modalPrimaryButton: {
+    marginLeft: 8,
   },
   scrollView: {
     flex: 1,

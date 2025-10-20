@@ -53,7 +53,7 @@ const SignUpScreen = ({ navigation }) => {
       case 'email':
         const trimmedEmail = value.trim();
         if (trimmedEmail.length === 0) {
-          error = null; // Don't show error until they start typing
+          error = null; // Don't show error until  start typing
         } else if (!validateEmail(trimmedEmail)) {
           error = 'Please enter a valid email address';
         } else if (trimmedEmail.length > 254) {
@@ -94,18 +94,25 @@ const SignUpScreen = ({ navigation }) => {
   const isFormValid = () => {
     const { name, email, password, confirmPassword } = formData;
     
-    return (
-      name.trim().length >= 2 &&
-      name.trim().length <= 50 &&
-      email.trim().length > 0 &&
-      email.trim().length <= 254 &&
-      validateEmail(email.trim()) &&
-      password.length >= 6 &&
-      password.length <= 128 &&
-      confirmPassword === password &&
-      Object.values(errors).every(error => !error)
-    );
-  };
+  //   return (
+  //     name.trim().length >= 2 &&
+  //     name.trim().length <= 50 &&
+  //     email.trim().length > 0 &&
+  //     email.trim().length <= 254 &&
+  //     validateEmail(email.trim()) &&
+  //     password.length >= 6 &&
+  //     password.length <= 128 &&
+  //     confirmPassword === password &&
+  //     Object.values(errors).every(error => !error)
+  //   );
+  // };
+      return (
+        name.trim().length > 0 &&
+        email.trim().length > 0 &&
+        password.length > 0 &&
+        confirmPassword === password
+      );
+    };
 
   // Handle sign up
   const handleSignUp = async () => {
