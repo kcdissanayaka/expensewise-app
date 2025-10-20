@@ -1,5 +1,14 @@
 import * as SQLite from 'expo-sqlite';
 import { DEFAULT_DB_CATEGORIES } from '../../constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const clearSyncQueue = async () => {
+  await AsyncStorage.setItem('sync_queue', '[]');
+  console.log('Sync queue cleared');
+};
+
+// Call this function once
+clearSyncQueue();
 
 // Database service for ExpenseWise app
 class DatabaseService {
@@ -365,7 +374,6 @@ class DatabaseService {
     }
   }
 
-  // Income operations
   // Income operations - LOCAL-FIRST with sync
   async createIncome(userId, incomeData) {
     try {
@@ -443,6 +451,109 @@ class DatabaseService {
       throw error;
     }
   }
+
+  // Update income - LOCAL-FIRST with sync
+async updateIncome(incomeId, updateData) {
+  try {
+    await this.ensureInitialized();
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    
+    const { amount, source, type, frequency, startDate } = updateData;
+    
+    // Validate required fields
+    if (!amount || amount <= 0) {
+      throw new Error('Valid income amount is required');
+    }
+    
+    if (!type) {
+      throw new Error('Income type is required');
+    }
+    
+    if (!source) {
+      throw new Error('Income source is required');
+    }
+    
+    // Update locally immediately
+    await this.db.runAsync(
+      'UPDATE income SET amount = ?, source = ?, type = ?, frequency = ?, start_date = ?, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [amount, source, type, frequency, startDate, incomeId]
+    );
+    
+    // CRITICAL FIX: Get the FULL updated record including api_id
+    const updatedIncome = await this.db.getFirstAsync(
+      'SELECT * FROM income WHERE id = ?',
+      [incomeId]
+    );
+    
+    // Queue for sync with the complete record (including api_id)
+    const { default: syncManager } = await import('../sync/syncManager');
+    syncManager.queueForSync('income', 'update', updatedIncome);
+    
+    return updatedIncome;
+  } catch (error) {
+    console.error('Error updating income:', error);
+    throw error;
+  }
+}
+
+// Fix records with missing api_id
+async fixMissingApiIds(userId) {
+  try {
+    await this.ensureInitialized();
+    
+    // Find incomes that were created but never got an api_id
+    const brokenIncomes = await this.db.getAllAsync(
+      'SELECT * FROM income WHERE user_id = ? AND (api_id IS NULL OR api_id = "") AND needs_sync = 1',
+      [userId]
+    );
+    
+    console.log(`Found ${brokenIncomes.length} incomes with missing api_id`);
+    
+    // Re-queue them for creation (they'll get proper api_id)
+    const { default: syncManager } = await import('../sync/syncManager');
+    
+    for (const income of brokenIncomes) {
+      console.log('Re-queuing income for sync:', income.id, income.source);
+      syncManager.queueForSync('income', 'create', income);
+    }
+    
+    return brokenIncomes.length;
+  } catch (error) {
+    console.error('Error fixing missing api_ids:', error);
+    return 0;
+  }
+}
+
+  // Delete income - LOCAL-FIRST with sync
+  async deleteIncome(incomeId) {
+    try {
+      await this.ensureInitialized();
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      
+      // Get income data before deletion (for API sync)
+      const income = await this.db.getFirstAsync('SELECT * FROM income WHERE id = ?', [incomeId]);
+      
+      // Delete locally immediately
+      await this.db.runAsync('DELETE FROM income WHERE id = ?', [incomeId]);
+      
+      // Queue for sync (if it was previously synced)
+      if (income && income.api_id) {
+        const { default: syncManager } = await import('../sync/syncManager');
+        syncManager.queueForSync('income', 'delete', income);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting income:', error);
+      throw error;
+    }
+  }
+
+  
 
   // Expense operations - LOCAL-FIRST with sync
   async createExpense(userId, expenseData) {

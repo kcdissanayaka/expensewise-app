@@ -14,6 +14,8 @@ import {
 import { useTheme } from '../../../app/providers/ThemeProvider';
 import databaseService from '../../../services/database/databaseService';
 import authService from '../../../services/auth/authService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 const IncomeScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -33,6 +35,34 @@ const IncomeScreen = ({ navigation }) => {
   useEffect(() => {
     loadIncomes();
   }, []);
+
+
+useEffect(() => {
+  // Temporary fix - clear broken data
+  const resetBrokenData = async () => {
+    try {
+      console.log('Cleaning up broken sync data...');
+      
+      // Delete the broken income record
+      await databaseService.db.runAsync('DELETE FROM income WHERE id = ?', [45]);
+      console.log('Broken income record (id: 45) deleted');
+      
+      // Clear sync queue
+      await AsyncStorage.setItem('sync_queue', '[]');
+      console.log('Sync queue cleared');
+      
+      // Reload incomes
+      await loadIncomes();
+      
+      console.log('Cleanup completed. Now create new incomes to test.');
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
+  };
+
+  // Uncomment the line below to run the cleanup ONCE
+  // resetBrokenData();
+}, []);
 
   const loadIncomes = async () => {
     try {
@@ -67,21 +97,17 @@ const IncomeScreen = ({ navigation }) => {
       if (!currentUser) return;
 
       if (editingIncome) {
-        // Update existing income
-        await databaseService.db.runAsync(
-          'UPDATE income SET amount = ?, source = ?, type = ?, frequency = ?, start_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [
-            parseFloat(newIncome.amount),
-            newIncome.source,
-            newIncome.type,
-            newIncome.frequency,
-            newIncome.startDate,
-            editingIncome.id,
-          ]
-        );
+        // Update existing income using databaseService method
+        await databaseService.updateIncome(editingIncome.id, {
+          amount: parseFloat(newIncome.amount),
+          source: newIncome.source,
+          type: newIncome.type,
+          frequency: newIncome.frequency,
+          startDate: newIncome.startDate,
+        });
         Alert.alert('Success', 'Income updated successfully!');
       } else {
-        // Create new income
+        // Create new income using databaseService method
         await databaseService.createIncome(currentUser.id, {
           amount: parseFloat(newIncome.amount),
           source: newIncome.source,
@@ -131,7 +157,8 @@ const IncomeScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await databaseService.db.runAsync('DELETE FROM income WHERE id = ?', [income.id]);
+              // Use databaseService method instead of direct SQL
+              await databaseService.deleteIncome(income.id);
               await loadIncomes();
               Alert.alert('Success', 'Income deleted successfully!');
             } catch (error) {
