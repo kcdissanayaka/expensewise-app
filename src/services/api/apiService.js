@@ -139,6 +139,94 @@ class ApiService {
     });
   }
 
+  // Allocation endpoints
+  async getAllocations(params = {}) {
+    try {
+      const queryString = new URLSearchParams(params).toString();
+      const endpoint = queryString ? `/allocations?${queryString}` : "/allocations";
+      console.log('Fetching allocations from:', endpoint);
+      const response = await this.request(endpoint);
+      console.log('Allocations response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error fetching allocations:', error);
+      throw error;
+    }
+  }
+
+  async createAllocation(allocationData) {
+    try {
+      console.log('Creating allocation with data:', allocationData);
+      const response = await this.request("/allocations", {
+        method: "POST",
+        body: JSON.stringify(allocationData),
+      });
+      console.log('Create allocation response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error creating allocation:', error);
+      throw error;
+    }
+  }
+
+  async updateAllocation(id, allocationData) {
+    try {
+      console.log('Updating allocation with ID:', id, 'data:', allocationData);
+      const response = await this.request(`/allocations/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(allocationData),
+      });
+      console.log('Update allocation response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error updating allocation:', error);
+      throw error;
+    }
+  }
+
+  async deleteAllocation(id) {
+    try {
+      console.log('Deleting allocation with ID:', id);
+      const response = await this.request(`/allocations/${id}`, {
+        method: "DELETE",
+      });
+      console.log('Delete allocation response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error deleting allocation:', error);
+      throw error;
+    }
+  }
+
+  // Get allocation by template ID
+  async getAllocationByTemplateId(templateId) {
+    try {
+      console.log('Getting allocation by template ID:', templateId);
+      const response = await this.request(`/allocations/template/${templateId}`);
+      console.log('Get allocation by template ID response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error getting allocation by template ID:', error);
+      throw error;
+    }
+  }
+
+  // Bulk operations for allocations
+  async bulkUpdateAllocations(operations) {
+    try {
+      console.log('Bulk updating allocations:', operations);
+      const response = await this.request("/allocations/bulk", {
+        method: "POST",
+        body: JSON.stringify({ operations }),
+      });
+      console.log('Bulk update allocations response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in bulk allocation operations:', error);
+      throw error;
+    }
+  }
+
   // Analytics and Reports
   async getAnalytics(params = {}) {
     return await this.request("/analytics");
@@ -205,6 +293,48 @@ class ApiService {
 
   setTimeout(timeout) {
     this.timeout = timeout;
+  }
+
+  // Test API connection
+  async testConnection() {
+    try {
+      const response = await this.request("/health");
+      return {
+        success: true,
+        message: "API connection successful",
+        data: response
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "API connection failed",
+        error: error.message
+      };
+    }
+  }
+
+  // Test allocation endpoints
+  async testAllocationEndpoints() {
+    try {
+      console.log("Testing allocation endpoints...");
+      
+      // Test GET allocations
+      const allocations = await this.getAllocations();
+      console.log("GET allocations test:", allocations);
+      
+      return {
+        success: true,
+        message: "Allocation endpoints are working",
+        allocations: allocations
+      };
+    } catch (error) {
+      console.error("Allocation endpoints test failed:", error);
+      return {
+        success: false,
+        message: "Allocation endpoints test failed",
+        error: error.message
+      };
+    }
   }
 }
 

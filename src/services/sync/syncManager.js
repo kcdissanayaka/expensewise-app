@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../api/apiService';
 import databaseService from '../database/databaseService';
+import authService from '../auth/authService';
 
 class SyncManager {
   constructor() {
@@ -50,7 +51,7 @@ class SyncManager {
   async queueForSync(type, action, data) {
     const queueItem = {
       id: Date.now() + Math.random(),
-      type, // 'expense', 'income', 'category'
+      type, // 'expense', 'income', 'category', 'allocation'
       action, // 'create', 'update', 'delete'
       data,
       timestamp: Date.now(),
@@ -136,6 +137,8 @@ class SyncManager {
         return await this.syncExpense(item);
       case 'income':
         return await this.syncIncome(item);
+      case 'allocation':
+        return await this.syncAllocation(item);
       default:
         throw new Error(`Unknown sync type: ${item.type}`);
     }
@@ -201,96 +204,211 @@ class SyncManager {
     }
   }
 
- // Sync income operations - UPDATED WITH FALLBACK LOGIC
-async syncIncome(item) {
-  const { action, data } = item;
-  console.log(`Syncing income: ${action}`, data);
+  // Sync income operations
+  async syncIncome(item) {
+    const { action, data } = item;
+    console.log(`Syncing income: ${action}`, data);
 
-  switch (action) {
-    case 'create':
-      // Prepare data for backend (map fields)
-      const createData = {
-        source: data.source,
-        amount: data.amount,
-        frequency: data.frequency,
-        startDate: data.start_date || data.startDate,
-        category: data.type === 'primary' ? 'salary' : 'freelance',
-        isRecurring: true,
-        description: data.source,
-        api_id: data.id // Include SQLite ID for reference
-      };
-      
-      console.log('Creating income in backend with data:', createData);
-      const apiResponse = await apiService.createIncome(createData);
-      console.log('Income created in backend:', apiResponse);
-      
-      // Update local record with MongoDB ObjectId
-      const mongoDbId = apiResponse.income?._id || apiResponse._id || apiResponse.id;
-      await databaseService.markAsSynced('income', data.id, mongoDbId);
-      console.log('Local income marked as synced with API ID:', mongoDbId);
-      break;
-      
-    case 'update':
-      // Prepare data for backend (map fields)
-      const updateData = {
-        source: data.source,
-        amount: data.amount,
-        frequency: data.frequency,
-        startDate: data.start_date || data.startDate,
-        category: data.type === 'primary' ? 'salary' : 'freelance',
-        isRecurring: true,
-        description: data.source,
-      };
-      
-      // FIX: Handle missing api_id by finding the MongoDB record
-      let updateIncomeId = data.api_id;
-      
-      if (!updateIncomeId) {
-        console.log('No API ID found, trying to find MongoDB record by source/amount...');
-        
-        // Try to find the MongoDB record by matching source, amount, and user
-        // This is a fallback for records created before the sync fix
-        const searchParams = {
+    switch (action) {
+      case 'create':
+        // Prepare data for backend (map fields)
+        const createData = {
           source: data.source,
           amount: data.amount,
-          // We can't filter by userId here since we don't have it in the sync data
+          frequency: data.frequency,
+          startDate: data.start_date || data.startDate,
+          category: data.type === 'primary' ? 'salary' : 'freelance',
+          isRecurring: true,
+          description: data.source,
+          api_id: data.id // Include SQLite ID for reference
         };
         
-        // For now, let's try a different approach - create as new if update fails
-        console.log('Creating as new income since no API ID exists...');
-        const newApiResponse = await apiService.createIncome(updateData);
-        const newMongoDbId = newApiResponse.income?._id || newApiResponse._id || newApiResponse.id;
+        console.log('Creating income in backend with data:', createData);
+        const apiResponse = await apiService.createIncome(createData);
+        console.log('Income created in backend:', apiResponse);
         
-        // Update local record with the new API ID
-        await databaseService.markAsSynced('income', data.id, newMongoDbId);
-        console.log('Created new income in backend and updated local API ID:', newMongoDbId);
-        return; // Exit early since we handled this as a create
-      }
-      
-      console.log('Updating income in backend with ID:', updateIncomeId);
-      console.log('Update data:', updateData);
-      await apiService.updateIncome(updateIncomeId, updateData);
-      await databaseService.markAsSynced('income', data.id);
-      console.log('Income updated successfully in backend');
-      break;
-      
-    case 'delete':
-      // Use api_id for deletes
-      const deleteIncomeId = data.api_id;
-      if (!deleteIncomeId) {
-        console.log('Cannot delete from backend: No API ID found. Deleting locally only.');
-        return;
-      }
-      
-      console.log('Deleting income from backend with ID:', deleteIncomeId);
-      await apiService.deleteIncome(deleteIncomeId);
-      console.log('Income deleted successfully from backend');
-      break;
-      
-    default:
-      throw new Error(`Unknown income action: ${action}`);
+        // Update local record with MongoDB ObjectId
+        const mongoDbId = apiResponse.income?._id || apiResponse._id || apiResponse.id;
+        await databaseService.markAsSynced('income', data.id, mongoDbId);
+        console.log('Local income marked as synced with API ID:', mongoDbId);
+        break;
+        
+      case 'update':
+        // Prepare data for backend (map fields)
+        const updateData = {
+          source: data.source,
+          amount: data.amount,
+          frequency: data.frequency,
+          startDate: data.start_date || data.startDate,
+          category: data.type === 'primary' ? 'salary' : 'freelance',
+          isRecurring: true,
+          description: data.source,
+        };
+        
+        // Handle missing api_id by finding the MongoDB record
+        let updateIncomeId = data.api_id;
+        
+        if (!updateIncomeId) {
+          console.log('No API ID found, creating as new income since no API ID exists...');
+          const newApiResponse = await apiService.createIncome(updateData);
+          const newMongoDbId = newApiResponse.income?._id || newApiResponse._id || newApiResponse.id;
+          
+          // Update local record with the new API ID
+          await databaseService.markAsSynced('income', data.id, newMongoDbId);
+          console.log('Created new income in backend and updated local API ID:', newMongoDbId);
+          return; // Exit early since we handled this as a create
+        }
+        
+        console.log('Updating income in backend with ID:', updateIncomeId);
+        console.log('Update data:', updateData);
+        await apiService.updateIncome(updateIncomeId, updateData);
+        await databaseService.markAsSynced('income', data.id);
+        console.log('Income updated successfully in backend');
+        break;
+        
+      case 'delete':
+        // Use api_id for deletes
+        const deleteIncomeId = data.api_id;
+        if (!deleteIncomeId) {
+          console.log('Cannot delete from backend: No API ID found. Deleting locally only.');
+          return;
+        }
+        
+        console.log('Deleting income from backend with ID:', deleteIncomeId);
+        await apiService.deleteIncome(deleteIncomeId);
+        console.log('Income deleted successfully from backend');
+        break;
+        
+      default:
+        throw new Error(`Unknown income action: ${action}`);
+    }
   }
-}
+
+  // Sync allocation operations
+  async syncAllocation(item) {
+    const { action, data } = item;
+    console.log(`Syncing allocation: ${action}`, data);
+
+    try {
+      // Get current user for userId
+      const currentUser = authService.getCurrentUser();
+      
+      if (!currentUser || !currentUser.id) {
+        throw new Error('User not authenticated or user ID not found');
+      }
+
+      const userId = currentUser.id;
+
+      switch (action) {
+        case 'create':
+          const createAllocationData = {
+            userId: userId,
+            categoryId: data.categoryId,
+            categoryName: data.categoryName,
+            percentage: data.percentage,
+            budgetLimit: data.budgetLimit,
+            templateId: data.template_id || data.templateId,
+            bucketName: data.bucket_name || data.bucketName || data.categoryName
+          };
+          
+          console.log('Creating allocation in backend with data:', createAllocationData);
+          const allocationApiResponse = await apiService.createAllocation(createAllocationData);
+          console.log('Allocation created in backend:', allocationApiResponse);
+          break;
+          
+        case 'update':
+          const updateAllocationData = {
+            userId: userId,
+            categoryId: data.categoryId,
+            categoryName: data.categoryName,
+            percentage: data.percentage,
+            budgetLimit: data.budgetLimit
+          };
+          
+          // For allocations, we use templateId to find the existing record
+          const templateId = data.template_id || data.templateId;
+          if (!templateId) {
+            throw new Error('Cannot update allocation: No templateId found');
+          }
+          
+          console.log('Searching for allocation with templateId:', templateId);
+          
+          // Get all allocations for the user
+          const existingAllocations = await apiService.getAllocations({ 
+            userId: userId
+          });
+          
+          if (existingAllocations.success && existingAllocations.allocations && existingAllocations.allocations.length > 0) {
+            // Find allocation with matching templateId
+            const matchingAllocation = existingAllocations.allocations.find(
+              alloc => alloc.templateId === templateId.toString()
+            );
+            
+            if (matchingAllocation) {
+              console.log('Updating allocation in backend with ID:', matchingAllocation._id);
+              await apiService.updateAllocation(matchingAllocation._id, updateAllocationData);
+              console.log('Allocation updated successfully in backend');
+            } else {
+              console.log('No matching allocation found, creating as new...');
+              await apiService.createAllocation({
+                ...updateAllocationData,
+                templateId: templateId,
+                bucketName: data.bucket_name || data.categoryName
+              });
+              console.log('Created new allocation in backend (update fallback)');
+            }
+          } else {
+            console.log('No allocations found for user, creating as new...');
+            await apiService.createAllocation({
+              ...updateAllocationData,
+              templateId: templateId,
+              bucketName: data.bucket_name || data.categoryName
+            });
+            console.log('Created new allocation in backend (update fallback)');
+          }
+          break;
+          
+        case 'delete':
+          // For deletes, we need to find the allocation by templateId
+          const deleteTemplateId = data.template_id || data.templateId;
+          if (!deleteTemplateId) {
+            console.log('Cannot delete allocation: No templateId found');
+            return;
+          }
+          
+          console.log('Searching for allocation to delete with templateId:', deleteTemplateId);
+          
+          // Get all allocations for the user
+          const allocationsToDelete = await apiService.getAllocations({ 
+            userId: userId
+          });
+          
+          if (allocationsToDelete.success && allocationsToDelete.allocations && allocationsToDelete.allocations.length > 0) {
+            // Find allocation with matching templateId
+            const allocationToDelete = allocationsToDelete.allocations.find(
+              alloc => alloc.templateId === deleteTemplateId.toString()
+            );
+            
+            if (allocationToDelete) {
+              console.log('Deleting allocation from backend with ID:', allocationToDelete._id);
+              await apiService.deleteAllocation(allocationToDelete._id);
+              console.log('Allocation deleted successfully from backend');
+            } else {
+              console.log('Cannot delete allocation: No matching allocation found in backend');
+            }
+          } else {
+            console.log('Cannot delete allocation: No allocations found for user');
+          }
+          break;
+          
+        default:
+          throw new Error(`Unknown allocation action: ${action}`);
+      }
+    } catch (error) {
+      console.error('Error in allocation sync:', error);
+      throw error;
+    }
+  }
 
   // Manual sync trigger
   async manualSync() {

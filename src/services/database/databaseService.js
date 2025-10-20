@@ -828,22 +828,25 @@ async fixMissingApiIds(userId) {
       if (!initialized) {
         throw new Error('Failed to initialize database');
       }
-
-      const { userId, categoryId, percentage, budgetLimit } = allocationData;
+  
+      const { userId, categoryId, categoryName, percentage, budgetLimit } = allocationData;
       
       const result = await this.db.runAsync(`
         INSERT INTO allocation_templates (user_id, name, is_active) 
         VALUES (?, ?, 1)
       `, [userId, `Budget Allocation ${Date.now()}`]);
-
+  
       const templateId = result.lastInsertRowId;
-
+  
+      // FIXED: Use category name for the bucket name instead of "Category null"
+      const bucketName = categoryName || `Category ${categoryId}`;
+      
       // Create allocation bucket
       await this.db.runAsync(`
         INSERT INTO allocation_buckets (template_id, name, percentage, target_amount, is_active)
         VALUES (?, ?, ?, ?, 1)
-      `, [templateId, `Category ${categoryId}`, percentage, budgetLimit]);
-
+      `, [templateId, bucketName, percentage, budgetLimit]);
+  
       return { id: templateId, ...allocationData };
     } catch (error) {
       console.error('Error creating allocation:', error);
@@ -858,16 +861,19 @@ async fixMissingApiIds(userId) {
       if (!initialized) {
         throw new Error('Failed to initialize database');
       }
-
-      const { categoryId, percentage, budgetLimit } = allocationData;
-
+  
+      const { categoryId, categoryName, percentage, budgetLimit } = allocationData;
+  
+      // FIXED: Use category name for the bucket name instead of "Category null"
+      const bucketName = categoryName || `Category ${categoryId}`;
+  
       // Update the allocation bucket
       await this.db.runAsync(`
         UPDATE allocation_buckets 
         SET name = ?, percentage = ?, target_amount = ?
         WHERE template_id = ?
-      `, [`Category ${categoryId}`, percentage, budgetLimit, allocationId]);
-
+      `, [bucketName, percentage, budgetLimit, allocationId]);
+  
       return { id: allocationId, ...allocationData };
     } catch (error) {
       console.error('Error updating allocation:', error);
