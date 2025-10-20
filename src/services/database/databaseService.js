@@ -159,12 +159,15 @@ class DatabaseService {
         needs_sync BOOLEAN DEFAULT 1,
         api_id TEXT,
         synced_at DATETIME,
+        is_recurring BOOLEAN DEFAULT 0,       -- NEW COLUMN
+        recurrence_end DATE,                  -- NEW COLUMN
+        is_active BOOLEAN DEFAULT 1,          -- NEW COLUMN
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id),
         FOREIGN KEY (category_id) REFERENCES categories (id)
       )`,
-
+      
       // Allocation templates table
       `CREATE TABLE IF NOT EXISTS allocation_templates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -264,6 +267,10 @@ class DatabaseService {
     } catch (error) {
       // Columns already exist - this is fine
     }
+
+    try { await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN is_recurring BOOLEAN DEFAULT 0`); } catch {}
+    try { await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN recurrence_end DATE`); } catch {}
+    try { await this.db.execAsync(`ALTER TABLE expenses ADD COLUMN is_active BOOLEAN DEFAULT 1`); } catch {}
 
     // Insert default categories
   }
@@ -556,6 +563,23 @@ async fixMissingApiIds(userId) {
   
 
   // Expense operations - LOCAL-FIRST with sync
+  async createDefaultCategoriesForUser(userId) {
+  try {
+    await this.ensureInitialized();
+    const defaults = DEFAULT_DB_CATEGORIES;
+
+    for (const c of defaults) {
+      await this.db.runAsync(
+        'INSERT INTO categories (user_id, name, color, icon, is_active, created_at) VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)',
+        [userId, c.name, c.color, c.icon]
+      );
+    }
+    console.log('[CAT] Created default categories for user:', userId);
+  } catch (err) {
+    console.error('[CAT] Create defaults error:', err);
+  }
+}
+
   async createExpense(userId, expenseData) {
     try {
       await this.ensureInitialized();
@@ -563,13 +587,31 @@ async fixMissingApiIds(userId) {
         throw new Error('Database not initialized');
       }
       
-      const { categoryId, amount, title, description, dueDate, status, type } = expenseData;
-      
-      // Save to local SQLite immediately
-      const result = await this.db.runAsync(
-        'INSERT INTO expenses (user_id, category_id, amount, title, description, due_date, status, type, needs_sync, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-        [userId, categoryId, amount, title, description, dueDate, status || 'Pending', type || 'Regular', 1]
-      );
+      const {
+  categoryId, amount, title, description,
+  dueDate, status, type,
+  isRecurring, recurrenceEnd, isActive
+} = expenseData;
+
+        const result = await this.db.runAsync(
+          `INSERT INTO expenses (
+            user_id, category_id, amount, title, description, due_date, status, type,
+            is_recurring, recurrence_end, is_active,
+            needs_sync, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
+          [
+            userId, categoryId, amount, title,
+            description || null, dueDate || null, status || 'Pending', type || 'Regular',
+            isRecurring ? 1 : 0, recurrenceEnd || null, isActive === 0 ? 0 : 1
+          ]
+        );
+
+      console.log('[DB] Created expense (local)', {
+          id: result.lastInsertRowId,
+          userId,
+          ...expenseData,
+          needs_sync: true
+        });
       
       const newExpense = { 
         id: result.lastInsertRowId, 
@@ -600,7 +642,7 @@ async fixMissingApiIds(userId) {
         SELECT e.*, c.name as category_name, c.color as category_color 
         FROM expenses e 
         JOIN categories c ON e.category_id = c.id 
-        WHERE e.user_id = ? AND e.is_archived = 0
+        WHERE e.user_id = ? AND e.is_archived = 0 AND e.is_active = 1
       `;
       
       const params = [userId];
@@ -629,6 +671,18 @@ async fixMissingApiIds(userId) {
       throw error;
     }
   }
+// hide Exepnces it is no more requierd expence
+  async stopExpense(expenseId) {
+  await this.ensureInitialized();
+  await this.db.runAsync(
+    `UPDATE expenses SET is_active = 0, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [expenseId]
+  );
+  const row = await this.db.getFirstAsync('SELECT * FROM expenses WHERE id = ?', [expenseId]);
+  const { default: syncManager } = await import('../sync/syncManager');
+  syncManager.queueForSync('expense', 'update', row);
+  return true;
+}
 
   // Categories operations
   async getCategoriesByUser(userId) {
@@ -679,7 +733,7 @@ async fixMissingApiIds(userId) {
       const expenseResult = await this.db.getAllAsync(`
         SELECT status, COALESCE(SUM(amount), 0) as total 
         FROM expenses 
-        WHERE user_id = ? AND is_archived = 0
+        WHERE user_id = ? AND is_archived = 0 AND is_active = 1
         AND strftime('%m', due_date) = ? 
         AND strftime('%Y', due_date) = ?
         GROUP BY status
@@ -903,28 +957,62 @@ async fixMissingApiIds(userId) {
   }
 
   // Update expense - LOCAL-FIRST with sync
-  async updateExpense(expenseId, updateData) {
-    try {
-      await this.ensureInitialized();
+  // async updateExpense(expenseId, updateData) {
+  //   try {
+  //     await this.ensureInitialized();
       
-      const { amount, title, description, categoryId, status } = updateData;
+  //     const { amount, title, description, categoryId, status } = updateData;
       
-      // Update locally immediately
-      await this.db.runAsync(
-        'UPDATE expenses SET amount = ?, title = ?, description = ?, category_id = ?, status = ?, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [amount, title, description, categoryId, status, expenseId]
-      );
+  //     // Update locally immediately
+  //     await this.db.runAsync(
+  //       'UPDATE expenses SET amount = ?, title = ?, description = ?, category_id = ?, status = ?, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+  //       [amount, title, description, categoryId, status, expenseId]
+  //     );
       
-      // Queue for sync
-      const { default: syncManager } = await import('../sync/syncManager');
-      syncManager.queueForSync('expense', 'update', { id: expenseId, ...updateData });
+  //     // Queue for sync
+  //     const { default: syncManager } = await import('../sync/syncManager');
+  //     syncManager.queueForSync('expense', 'update', { id: expenseId, ...updateData });
       
-      return true;
-    } catch (error) {
-      console.error('Error updating expense:', error);
-      throw error;
-    }
+  //     return true;
+  //   } catch (error) {
+  //     console.error('Error updating expense:', error);
+  //     throw error;
+  //   }
+  // }
+      async updateExpense(expenseId, updateData) {
+      try {
+        await this.ensureInitialized();
+
+        const {
+          amount, title, description, categoryId, status,
+          dueDate, type,
+          isRecurring, recurrenceEnd, isActive
+        } = updateData;
+
+        await this.db.runAsync(
+          `UPDATE expenses SET
+            amount = ?, title = ?, description = ?, category_id = ?, status = ?,
+            due_date = ?, type = ?,
+            is_recurring = ?, recurrence_end = ?, is_active = ?,
+            needs_sync = 1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+          [
+            amount, title, description, categoryId, status,
+            dueDate || null, (type || 'Regular'),
+            isRecurring ? 1 : 0, recurrenceEnd || null, (isActive === 0 ? 0 : 1),
+            expenseId
+          ]
+        );
+
+    const updated = await this.db.getFirstAsync('SELECT * FROM expenses WHERE id = ?', [expenseId]);
+    const { default: syncManager } = await import('../sync/syncManager');
+    syncManager.queueForSync('expense', 'update', updated);
+    return updated;
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    throw error;
   }
+}
 
   // Delete expense - LOCAL-FIRST with sync
   async deleteExpense(expenseId) {
