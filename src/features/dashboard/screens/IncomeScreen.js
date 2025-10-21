@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,13 @@ import {
   Alert,
   Modal,
   TextInput,
+  Animated,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useTheme } from '../../../app/providers/ThemeProvider';
 import databaseService from '../../../services/database/databaseService';
 import authService from '../../../services/auth/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 
 const IncomeScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -32,37 +33,39 @@ const IncomeScreen = ({ navigation }) => {
     startDate: new Date().toISOString().split('T')[0],
   });
 
+  // Refs to keep track of open swipeables
+  const swipeableRefs = useRef(new Map());
+
   useEffect(() => {
     loadIncomes();
   }, []);
 
+  useEffect(() => {
+    // Temporary fix - clear broken data
+    const resetBrokenData = async () => {
+      try {
+        console.log('Cleaning up broken sync data...');
+        
+        // Delete the broken income record
+        await databaseService.db.runAsync('DELETE FROM income WHERE id = ?', [45]);
+        console.log('Broken income record (id: 45) deleted');
+        
+        // Clear sync queue
+        await AsyncStorage.setItem('sync_queue', '[]');
+        console.log('Sync queue cleared');
+        
+        // Reload incomes
+        await loadIncomes();
+        
+        console.log('Cleanup completed. Now create new incomes to test.');
+      } catch (error) {
+        console.error('Error during cleanup:', error);
+      }
+    };
 
-useEffect(() => {
-  // Temporary fix - clear broken data
-  const resetBrokenData = async () => {
-    try {
-      console.log('Cleaning up broken sync data...');
-      
-      // Delete the broken income record
-      await databaseService.db.runAsync('DELETE FROM income WHERE id = ?', [45]);
-      console.log('Broken income record (id: 45) deleted');
-      
-      // Clear sync queue
-      await AsyncStorage.setItem('sync_queue', '[]');
-      console.log('Sync queue cleared');
-      
-      // Reload incomes
-      await loadIncomes();
-      
-      console.log('Cleanup completed. Now create new incomes to test.');
-    } catch (error) {
-      console.error('Error during cleanup:', error);
-    }
-  };
-
-  // Uncomment the line below to run the cleanup ONCE
-  // resetBrokenData();
-}, []);
+    // Uncomment the line below to run the cleanup ONCE
+    // resetBrokenData();
+  }, []);
 
   const loadIncomes = async () => {
     try {
@@ -146,29 +149,22 @@ useEffect(() => {
     setModalVisible(true);
   };
 
-  const handleDeleteIncome = (income) => {
-    Alert.alert(
-      'Delete Income',
-      `Are you sure you want to delete ${income.source}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Use databaseService method instead of direct SQL
-              await databaseService.deleteIncome(income.id);
-              await loadIncomes();
-              Alert.alert('Success', 'Income deleted successfully!');
-            } catch (error) {
-              console.error('Error deleting income:', error);
-              Alert.alert('Error', 'Failed to delete income');
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteIncome = async (income) => {
+    try {
+      // Close the swipeable
+      const swipeable = swipeableRefs.current.get(income.id);
+      if (swipeable) {
+        swipeable.close();
+      }
+      
+      // Use databaseService method instead of direct SQL
+      await databaseService.deleteIncome(income.id);
+      await loadIncomes();
+      Alert.alert('Success', 'Income deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting income:', error);
+      Alert.alert('Error', 'Failed to delete income');
+    }
   };
 
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
@@ -179,6 +175,24 @@ useEffect(() => {
       .reduce((total, income) => total + income.amount, 0);
   };
 
+  // Render right actions for swipeable - now with immediate deletion
+  const renderRightActions = (progress, dragX, income) => {
+    const trans = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [0, 100],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <View style={[styles.deleteSwipeAction, { backgroundColor: '#FF3B30' }]}>
+        <Animated.Text style={[styles.deleteSwipeText, { transform: [{ translateX: trans }] }]}>
+          Deleting...
+        </Animated.Text>
+      </View>
+    );
+  };
+
+  // Update the renderIncomeCard function to use Swipeable with immediate deletion
   const renderIncomeCard = (income, index) => {
     const getFrequencyColor = (frequency) => {
       switch (frequency) {
@@ -190,48 +204,84 @@ useEffect(() => {
     };
 
     return (
-      <TouchableOpacity
-        key={index}
-        style={[styles.incomeCard, { backgroundColor: theme.colors.card }]}
-        onPress={() => handleEditIncome(income)}
+      <Swipeable
+        ref={(ref) => {
+          if (ref) {
+            swipeableRefs.current.set(income.id, ref);
+          } else {
+            swipeableRefs.current.delete(income.id);
+          }
+        }}
+        key={income.id || index}
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, income)}
+        onSwipeableRightOpen={() => {
+          // Show confirmation and delete immediately
+          Alert.alert(
+            'Delete Income',
+            `Are you sure you want to delete ${income.source}?`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => {
+                const swipeable = swipeableRefs.current.get(income.id);
+                if (swipeable) {
+                  swipeable.close();
+                }
+              }},
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => handleDeleteIncome(income)
+              },
+            ]
+          );
+        }}
+        onSwipeableOpen={() => {
+          // Close other open swipeables
+          swipeableRefs.current.forEach((ref, id) => {
+            if (id !== income.id && ref) {
+              ref.close();
+            }
+          });
+        }}
+        rightThreshold={80}
+        friction={2}
+        overshootRight={false}
       >
-        <View style={styles.incomeHeader}>
-          <View style={styles.incomeInfo}>
-            <Text style={[styles.incomeSource, { color: theme.colors.text }]}>
-              {income.source}
-            </Text>
-            <Text style={[styles.incomeType, { color: theme.colors.textSecondary }]}>
-              {income.type === 'primary' ? 'Primary Income' : 'Secondary Income'}
-            </Text>
-          </View>
-          <View style={styles.incomeRight}>
-            <Text style={[styles.incomeAmount, { color: '#4CAF50' }]}>
-              +{formatCurrency(income.amount)}
-            </Text>
-            <View style={[styles.frequencyBadge, { backgroundColor: getFrequencyColor(income.frequency) }]}>
-              <Text style={styles.frequencyText}>{income.frequency}</Text>
+        <TouchableOpacity
+          style={[styles.incomeCard, { backgroundColor: theme.colors.card }]}
+          onPress={() => handleEditIncome(income)}
+        >
+          <View style={styles.incomeHeader}>
+            <View style={styles.incomeInfo}>
+              <Text style={[styles.incomeSource, { color: theme.colors.text }]}>
+                {income.source}
+              </Text>
+              <Text style={[styles.incomeType, { color: theme.colors.textSecondary }]}>
+                {income.type === 'primary' ? 'Primary Income' : 'Secondary Income'}
+              </Text>
+            </View>
+            <View style={styles.incomeRight}>
+              <Text style={[styles.incomeAmount, { color: '#4CAF50' }]}>
+                +{formatCurrency(income.amount)}
+              </Text>
+              <View style={[styles.frequencyBadge, { backgroundColor: getFrequencyColor(income.frequency) }]}>
+                <Text style={styles.frequencyText}>{income.frequency}</Text>
+              </View>
             </View>
           </View>
-        </View>
-        
-        <View style={styles.incomeFooter}>
-          <Text style={[styles.incomeDate, { color: theme.colors.textSecondary }]}>
-            Started: {income.start_date ? new Date(income.start_date).toLocaleDateString() : 'N/A'}
-          </Text>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleDeleteIncome(income);
-            }}
-          >
-            <Text style={styles.deleteButtonText}>🗑️</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+          
+          <View style={styles.incomeFooter}>
+            <Text style={[styles.incomeDate, { color: theme.colors.textSecondary }]}>
+              Started: {income.start_date ? new Date(income.start_date).toLocaleDateString() : 'N/A'}
+            </Text>
+            {/* Remove the delete button from here since we have swipe to delete */}
+            <View style={styles.deleteButtonPlaceholder} />
+          </View>
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
+  // Add the missing renderAddIncomeModal function
   const renderAddIncomeModal = () => (
     <Modal
       animationType="slide"
@@ -579,11 +629,22 @@ const styles = StyleSheet.create({
   incomeDate: {
     fontSize: 12,
   },
-  deleteButton: {
-    padding: 4,
+  deleteButtonPlaceholder: {
+    width: 24, // Placeholder to maintain layout
   },
-  deleteButtonText: {
-    fontSize: 16,
+  // Swipe action styles
+  deleteSwipeAction: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    height: '100%',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  deleteSwipeText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   emptyState: {
     padding: 40,
