@@ -126,7 +126,23 @@ const ReportsScreen = ({ navigation }) => {
 
   const getCategoryColor = (categoryId) => {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF'];
-    return colors[categoryId % colors.length];
+    // Support numeric and string IDs. For strings, compute a small hash to pick a color.
+    if (typeof categoryId === 'number' && Number.isFinite(categoryId)) {
+      return colors[categoryId % colors.length];
+    }
+
+    if (typeof categoryId === 'string') {
+      let h = 0;
+      for (let i = 0; i < categoryId.length; i++) {
+        h = (h << 5) - h + categoryId.charCodeAt(i);
+        h |= 0; // convert to 32bit integer
+      }
+      const idx = Math.abs(h) % colors.length;
+      return colors[idx];
+    }
+
+    // Fallback
+    return colors[0];
   };
 
   const onRefresh = async () => {
@@ -328,6 +344,7 @@ const ReportsScreen = ({ navigation }) => {
       >
         {renderPeriodSelector()}
         {renderSummaryCard()}
+        {renderPieChart()}
         {renderCategoryBreakdown()}
       </ScrollView>
     </SafeAreaView>
