@@ -163,7 +163,6 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   // Simple email validation
-  // Simple email validation - matches backend requirements
   const isValidEmail = (email) => {
     // Require valid domain with at least 2 character TLD (.com, .net, etc)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;

@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import { PieChart } from 'react-native-chart-kit';
 import { useTheme } from '../../../app/providers/ThemeProvider';
 import { databaseService } from '../../../services';
 import authService from '../../../services/auth/authService';
@@ -18,35 +17,37 @@ const { width } = Dimensions.get('window');
 
 const ReportsScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  
+  // State to hold financial report data for the current month
   const [reportData, setReportData] = useState({
-    // monthlyExpenses: [],
     categoryBreakdown: [],
     totalIncome: 0,
     totalExpenses: 0,
     savingsRate: 0,
     topCategories: [],
-    // weeklyTrend: []
   });
-  const [selectedPeriod, setSelectedPeriod] = useState('month'); // month, quarter, year
+  
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Load report data when component mounts
   useEffect(() => {
     loadReportData();
-  }, [selectedPeriod]);
+  }, []);
 
+  // Fetch and calculate financial report data from database
   const loadReportData = async () => {
     try {
       setLoading(true);
       const currentUser = authService.getCurrentUser();
       if (!currentUser) return;
 
-      // Load income and expenses
+      // Load all financial data for current user
       const incomeData = await databaseService.getIncomeByUser(currentUser.id);
       const expenseData = await databaseService.getExpensesByUser(currentUser.id);
       const categories = await databaseService.getCategoriesByUser(currentUser.id);
 
-      // Calculate period-specific data
+      // Calculate metrics for current month
       const periodData = calculatePeriodData(incomeData, expenseData, categories);
       
       setReportData(periodData);
@@ -57,30 +58,14 @@ const ReportsScreen = ({ navigation }) => {
     }
   };
 
+  // Calculate financial metrics for the current month
   const calculatePeriodData = (incomeData, expenseData, categories) => {
     const now = new Date();
-    let startDate, endDate;
+    // Set date range to current month (first day to last day)
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    switch (selectedPeriod) {
-      case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        break;
-      case 'quarter':
-        const quarterStart = Math.floor(now.getMonth() / 3) * 3;
-        startDate = new Date(now.getFullYear(), quarterStart, 1);
-        endDate = new Date(now.getFullYear(), quarterStart + 3, 0);
-        break;
-      case 'year':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear(), 11, 31);
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
-
-    // Filter data by period
+    // Filter income and expenses for current month only
     const periodIncome = incomeData.filter(income => {
       const incomeDate = new Date(income.created_at);
       return incomeDate >= startDate && incomeDate <= endDate;
@@ -91,11 +76,12 @@ const ReportsScreen = ({ navigation }) => {
       return expenseDate >= startDate && expenseDate <= endDate;
     });
 
+    // Calculate total income, expenses, and savings rate
     const totalIncome = periodIncome.reduce((sum, income) => sum + income.amount, 0);
     const totalExpenses = periodExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
 
-    // Category breakdown
+    // Build category breakdown with expenses grouped by category
     const categoryBreakdown = categories.map(category => {
       const categoryExpenses = periodExpenses.filter(expense => 
         expense.category_id === category.id
@@ -105,14 +91,14 @@ const ReportsScreen = ({ navigation }) => {
 
       return {
         id: category.id,
-        name: category.name,
+        name: category.name || 'Unknown',
         amount: total,
         percentage,
-        color: getCategoryColor(category.id)
+        color: getCategoryColor(category.id) || '#CCCCCC'
       };
-    }).filter(cat => cat.amount > 0).sort((a, b) => b.amount - a.amount);
+    }).filter(cat => cat.amount > 0).sort((a, b) => b.amount - a.amount); // Only categories with expenses, sorted by amount
 
-    // Top 5 categories
+    // Extract top 5 spending categories for charts
     const topCategories = categoryBreakdown.slice(0, 5);
 
     return {
@@ -124,13 +110,17 @@ const ReportsScreen = ({ navigation }) => {
     };
   };
 
+  // Assign a consistent color to each category based on its ID
   const getCategoryColor = (categoryId) => {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF'];
-    // Support numeric and string IDs. For strings, compute a small hash to pick a color.
+    
+    // For numeric category IDs: use modulo to pick color
     if (typeof categoryId === 'number' && Number.isFinite(categoryId)) {
       return colors[categoryId % colors.length];
     }
 
+    // For string category IDs: compute hash to pick color consistently
+    // This ensures same category always gets same color across renders
     if (typeof categoryId === 'string') {
       let h = 0;
       for (let i = 0; i < categoryId.length; i++) {
@@ -141,7 +131,7 @@ const ReportsScreen = ({ navigation }) => {
       return colors[idx];
     }
 
-    // Fallback
+    // Fallback for null/undefined IDs
     return colors[0];
   };
 
@@ -153,50 +143,10 @@ const ReportsScreen = ({ navigation }) => {
 
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
 
-  const getPeriodLabel = () => {
-    switch (selectedPeriod) {
-      case 'month': return 'This Month';
-      case 'quarter': return 'This Quarter';
-      case 'year': return 'This Year';
-      default: return 'This Month';
-    }
-  };
-
-  const renderPeriodSelector = () => (
-    <View style={styles.periodSelector}>
-      {['month', 'quarter', 'year'].map((period) => (
-        <TouchableOpacity
-          key={period}
-          style={[
-            styles.periodButton,
-            {
-              backgroundColor: selectedPeriod === period 
-                ? theme.colors.primary 
-                : theme.colors.card,
-              borderColor: theme.colors.border
-            }
-          ]}
-          onPress={() => setSelectedPeriod(period)}
-        >
-          <Text style={[
-            styles.periodButtonText,
-            {
-              color: selectedPeriod === period 
-                ? '#FFFFFF' 
-                : theme.colors.text
-            }
-          ]}>
-            {period.charAt(0).toUpperCase() + period.slice(1)}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   const renderSummaryCard = () => (
     <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
       <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-        {getPeriodLabel()} Summary 📈
+        This Month Summary 📈
       </Text>
       
       <View style={styles.summaryRow}>
@@ -233,6 +183,7 @@ const ReportsScreen = ({ navigation }) => {
     </View>
   );
 
+  // Render detailed list of top spending categories with amounts and percentages
   const renderCategoryBreakdown = () => (
     <View style={[styles.breakdownCard, { backgroundColor: theme.colors.card }]}>
       <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
@@ -247,15 +198,18 @@ const ReportsScreen = ({ navigation }) => {
         reportData.topCategories.map((category, index) => (
           <View key={category.id} style={styles.categoryItem}>
             <View style={styles.categoryInfo}>
-              <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
+              {/* Colored dot matching bar chart color */}
+              <View style={[styles.categoryDot, { backgroundColor: category.color || '#CCCCCC' }]} />
               <Text style={[styles.categoryName, { color: theme.colors.text }]}>
                 {category.name}
               </Text>
             </View>
             <View style={styles.categoryAmounts}>
+              {/* Total spending amount */}
               <Text style={[styles.categoryAmount, { color: theme.colors.text }]}>
                 {formatCurrency(category.amount)}
               </Text>
+              {/* Percentage of total expenses */}
               <Text style={[styles.categoryPercentage, { color: theme.colors.textSecondary }]}>
                 {category.percentage.toFixed(1)}%
               </Text>
@@ -266,44 +220,60 @@ const ReportsScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderPieChart = () => {
-    const raw = reportData.categoryBreakdown || [];
-    // Defensive: filter out any falsy/invalid entries
-    const breakdown = raw.filter(cat => cat && typeof cat === 'object' && cat.name && (cat.amount !== undefined));
-    if (breakdown.length === 0) return null;
-
-    // Map to format expected by react-native-chart-kit PieChart
-    const data = breakdown.map(cat => ({
-      name: cat.name || 'Unknown',
-      amount: typeof cat.amount === 'number' ? cat.amount : 0,
-      color: cat.color || '#CCCCCC',
-      legendFontColor: theme.colors.text,
-      legendFontSize: 12
-    }));
+  // Render bar chart showing top 5 spending categories
+  const renderBarChart = () => {
+    console.log('topCategories:', reportData.topCategories);
+    
+    // Show empty state if no expense data available
+    if (!reportData.topCategories || reportData.topCategories.length === 0) {
+      return (
+        <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+            Top Spending by Category 📊
+          </Text>
+          <Text style={[styles.noDataText, { color: theme.colors.textSecondary }]}>
+            No expense data for this period
+          </Text>
+        </View>
+      );
+    }
 
     return (
-      <View style={[styles.pieCard, { backgroundColor: theme.colors.card }]}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Category Split</Text>
-        <PieChart
-          data={data}
-          width={Math.min(width - 40, 360)}
-          height={180}
-          accessor={'amount'}
-          backgroundColor={'transparent'}
-          paddingLeft={'15'}
-          absolute={false}
-        />
-        {/* Compact legend: color dot, label, percentage */}
-        <View style={styles.legendContainer}>
-          {breakdown.slice(0, 6).map((cat) => (
-            <View key={cat.id || cat.name} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: cat.color || '#CCCCCC' }]} />
-              <Text style={[styles.legendLabel, { color: theme.colors.text }]} numberOfLines={1} ellipsizeMode="tail">
-                {cat.name}
-              </Text>
-              <Text style={[styles.legendPercent, { color: theme.colors.textSecondary }]}> {Number(cat.percentage || 0).toFixed(1)}% </Text>
-            </View>
-          ))}
+      <View style={[styles.chartCard, { backgroundColor: theme.colors.card }]}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+          Top Spending by Category 📊
+        </Text>
+        <View style={styles.barChartContainer}>
+          {reportData.topCategories.slice(0, 5).map((category, index) => {
+            // Calculate bar height relative to highest spending category
+            const maxAmount = reportData.topCategories[0]?.amount || 1;
+            const barHeight = (category.amount / maxAmount) * 100;
+            
+            return (
+              <View key={category.id || index} style={styles.barItem}>
+                {/* Display amount above bar */}
+                <Text style={[styles.barAmount, { color: theme.colors.textSecondary }]}>
+                  €{category.amount.toFixed(0)}
+                </Text>
+                {/* Vertical bar with dynamic height */}
+                <View style={styles.barWrapper}>
+                  <View 
+                    style={[
+                      styles.bar, 
+                      { 
+                        height: Math.max(barHeight, 15), // Minimum 15px for visibility
+                        backgroundColor: category.color || '#4ECDC4'
+                      }
+                    ]} 
+                  />
+                </View>
+                {/* Category name below bar */}
+                <Text style={[styles.barLabel, { color: theme.colors.text }]} numberOfLines={1}>
+                  {category.name}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       </View>
     );
@@ -343,9 +313,8 @@ const ReportsScreen = ({ navigation }) => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {renderPeriodSelector()}
         {renderSummaryCard()}
-        {renderPieChart()}
+        {renderBarChart()}
         {renderCategoryBreakdown()}
       </ScrollView>
     </SafeAreaView>
@@ -382,23 +351,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingTop: 10,
-  },
-  periodSelector: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  periodButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   summaryCard: {
     padding: 20,
@@ -543,39 +495,45 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
   },
-  pieCard: {
+  chartCard: {
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
-    alignItems: 'center'
   },
-  legendContainer: {
-    marginTop: 12,
-    width: '100%',
+  barChartContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start'
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: 160,
+    marginTop: 16,
+    paddingHorizontal: 10,
   },
-  legendItem: {
-    flexDirection: 'row',
+  barItem: {
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingRight: 12,
-    minWidth: 120
+    flex: 1,
+    marginHorizontal: 2,
   },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8
+  barWrapper: {
+    height: 100,
+    justifyContent: 'flex-end',
+    width: '100%',
+    alignItems: 'center',
   },
-  legendLabel: {
-    fontSize: 12,
-    maxWidth: 80
+  bar: {
+    width: 30,
+    borderRadius: 4,
+    minHeight: 15,
   },
-  legendPercent: {
-    fontSize: 12,
-    marginLeft: 6
+  barLabel: {
+    fontSize: 10,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  barAmount: {
+    fontSize: 10,
+    marginBottom: 4,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
 

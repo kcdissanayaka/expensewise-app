@@ -348,7 +348,6 @@ class AuthService {
     }
   }
 
-  // Login user - HYBRID: Try API-first, fallback to local
   // Authenticate user with email/password - tries backend API first, falls back to local database if offline
   async login(email, password) {
     try {
@@ -510,7 +509,7 @@ class AuthService {
     }
   }
 
-  // Update user (exposed for UI) - updates local DB, optionally hashes password
+  // Update user - updates local DB, optionally hashes password
   async updateUser(userId, updateData) {
     try {
       // If password is provided, hash it and update password separately
