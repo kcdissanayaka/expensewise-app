@@ -276,6 +276,18 @@ const ReportsScreen = ({ navigation }) => {
           paddingLeft={'15'}
           absolute={false}
         />
+        {/* Compact legend: color dot, label, percentage */}
+        <View style={styles.legendContainer}>
+          {reportData.categoryBreakdown.slice(0, 6).map((cat) => (
+            <View key={cat.id} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
+              <Text style={[styles.legendLabel, { color: theme.colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                {cat.name}
+              </Text>
+              <Text style={[styles.legendPercent, { color: theme.colors.textSecondary }]}> {cat.percentage.toFixed(1)}% </Text>
+            </View>
+          ))}
+        </View>
       </View>
     );
   };
@@ -512,6 +524,40 @@ const styles = StyleSheet.create({
   monthAmount: {
     fontSize: 8,
     fontWeight: 'bold',
+  },
+  pieCard: {
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center'
+  },
+  legendContainer: {
+    marginTop: 12,
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start'
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingRight: 12,
+    minWidth: 120
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8
+  },
+  legendLabel: {
+    fontSize: 12,
+    maxWidth: 80
+  },
+  legendPercent: {
+    fontSize: 12,
+    marginLeft: 6
   },
 });
 
