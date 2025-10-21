@@ -48,7 +48,6 @@ export class SyncService {
         }
       }
       
-      console.log('Expense sync completed:', syncResults);
       return {
         success: true,
         results: syncResults
@@ -81,8 +80,6 @@ export class SyncService {
     const remoteExpense = remoteExpenses.find(remote => remote.id === localExpense.id);
     
     if (!remoteExpense) {
-      // Local expense doesn't exist remotely - push to server
-      console.log('Pushing local expense to server:', localExpense.id);
       await this._pushExpenseToServer(sanitizedLocal);
       syncResults.synced++;
       return;
@@ -115,32 +112,25 @@ export class SyncService {
       return;
     }
     
-    // Sanitize and save to local database
     const sanitized = DataValidator.sanitizeData(remoteExpense, 'expense');
     await databaseService.saveExpense(sanitized);
     
-    console.log('Saved remote expense locally:', remoteExpense.id);
     syncResults.synced++;
   }
   
-  // Push local expense to server
   static async _pushExpenseToServer(expense) {
     try {
       const apiService = (await import('../api/apiService')).default;
       
-      // Transform expense data for backend compatibility
       const backendExpense = await this._transformExpenseForBackend(expense);
       
-      // Validate before sending
       const validation = DataValidator.validateExpense(backendExpense);
       if (!validation.isValid) {
         throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
       }
       
-      const response = await apiService.createExpense(backendExpense, true); // isSync = true
-      if (response.success) {
-        console.log('Expense pushed to server successfully');
-      } else {
+      const response = await apiService.createExpense(backendExpense, true);
+      if (!response.success) {
         throw new Error(response.message || 'Failed to push expense');
       }
     } catch (error) {
@@ -149,23 +139,17 @@ export class SyncService {
     }
   }
   
-  // Transform local expense data for backend API compatibility
   static async _transformExpenseForBackend(localExpense) {
-    console.log('Transforming expense for backend:', localExpense);
-    
     try {
-      // Ensure description is not empty (backend requires 1-200 chars)
       let description = localExpense.description || '';
       if (description.trim().length === 0) {
         description = localExpense.title || 'Manual expense entry';
       }
       
-      // Ensure description is within limits
       if (description.length > 200) {
         description = description.substring(0, 200);
       }
       
-      // Map local category to backend category
       let categoryId = localExpense.categoryId || localExpense.category_id;
       
       // If we have a local category ID, try to find matching backend category
@@ -203,7 +187,6 @@ export class SyncService {
         categoryId = 'Other'; // Default category if no categoryId
       }
       
-      // Transform the expense object for backend
       const backendExpense = {
         amount: parseFloat(localExpense.amount),
         description: description,
@@ -214,7 +197,6 @@ export class SyncService {
         status: localExpense.status || 'Pending'
       };
       
-      console.log('Transformed expense:', backendExpense);
       return backendExpense;
       
     } catch (error) {
@@ -232,27 +214,21 @@ export class SyncService {
     }
   }
   
-  // Update expense both locally and remotely with resolved data
   static async _updateExpenseEverywhere(resolvedExpense) {
     try {
-      // Validate resolved data
       const validation = DataValidator.validateExpense(resolvedExpense);
       if (!validation.isValid) {
         throw new Error(`Resolved expense validation failed: ${validation.errors.join(', ')}`);
       }
       
-      // Update locally
       await databaseService.updateExpense(resolvedExpense.id, resolvedExpense);
       
-      // Update remotely
       const apiService = (await import('../api/apiService')).default;
       const response = await apiService.updateExpense(resolvedExpense.id, resolvedExpense);
       
       if (!response.success) {
         throw new Error('Failed to update remote expense');
       }
-      
-      console.log('Expense updated everywhere after conflict resolution');
     } catch (error) {
       console.error('Failed to update expense everywhere:', error);
       throw error;
@@ -274,12 +250,8 @@ export class SyncService {
   }
 
 
-  // Sync categories with validation
   static async syncCategories() {
-    console.log('Starting category sync...');
-    
     try {
-      // Get local and remote categories
       const localCategories = await databaseService.getAllCategories();
       const apiService = (await import('../api/apiService')).default;
       const remoteResponse = await apiService.getCategories();
@@ -290,7 +262,6 @@ export class SyncService {
       
       const remoteCategories = remoteResponse.data || [];
       
-      // Process categories with validation
       for (const localCategory of localCategories) {
         const validation = DataValidator.validateCategory(localCategory);
         if (!validation.isValid) {
@@ -298,21 +269,18 @@ export class SyncService {
           continue;
         }
         
-        // Check for remote conflicts
         const remoteCategory = remoteCategories.find(remote => remote.id === localCategory.id);
         if (remoteCategory && ConflictResolver.hasConflict(localCategory, remoteCategory)) {
           const resolved = ConflictResolver.resolveConflict(
             localCategory, 
             remoteCategory, 
-            ConflictStrategy.LOCAL_WINS // Categories prefer local changes
+            ConflictStrategy.LOCAL_WINS
           );
           
-          // Update with resolved data
           await this._updateCategoryEverywhere(resolved);
         }
       }
       
-      console.log('Category sync completed');
       return { success: true };
       
     } catch (error) {
@@ -330,8 +298,6 @@ export class SyncService {
       
       const apiService = (await import('../api/apiService')).default;
       await apiService.updateCategory(category.id, category);
-      
-      console.log('Category updated everywhere');
     } catch (error) {
       console.error('Failed to update category:', error);
       throw error;
@@ -339,10 +305,7 @@ export class SyncService {
   }
   
   
-  // Validate all local data integrity
   static async validateLocalDataIntegrity() {
-    console.log('Validating local data integrity...');
-    
     const results = {
       expenses: { valid: 0, invalid: 0, warnings: 0 },
       categories: { valid: 0, invalid: 0, warnings: 0 },
@@ -350,7 +313,6 @@ export class SyncService {
     };
     
     try {
-      // Validate expenses
       const expenses = await databaseService.getAllExpenses();
       for (const expense of expenses) {
         const validation = DataValidator.validateExpense(expense);
@@ -376,12 +338,48 @@ export class SyncService {
         results.categories.warnings += validation.warnings.length;
       }
       
-      console.log('Data integrity check completed:', results);
       return results;
       
     } catch (error) {
       console.error('Data integrity check failed:', error);
       throw error;
+    }
+  }
+
+  // Transform local user record into backend-compatible payload
+  static async _transformUserForBackend(localUser) {
+    try {
+      if (!localUser) throw new Error('No local user provided');
+
+      // Normalize and pick allowed fields
+      const payload = {};
+
+      if (localUser.name) payload.name = String(localUser.name).trim();
+      if (localUser.email) {
+        const email = String(localUser.email).toLowerCase().trim();
+        // Stricter email validation matching backend requirements
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (emailRegex.test(email)) {
+          payload.email = email;
+        } else {
+          console.warn('Invalid email format, skipping email update:', email);
+        }
+      }
+      if (localUser.currency) payload.currency = String(localUser.currency).toUpperCase();
+      if (localUser.financial_goals) payload.financial_goals = localUser.financial_goals;
+
+      // Optional numeric preferences
+      if (localUser.monthlyBudget !== undefined) payload.monthlyBudget = Number(localUser.monthlyBudget || 0);
+      if (localUser.monthlyIncome !== undefined) payload.monthlyIncome = Number(localUser.monthlyIncome || 0);
+
+      return payload;
+    } catch (error) {
+      console.error('Error transforming user for backend:', error);
+      // Return a minimal safe payload
+      return {
+        name: localUser?.name || 'User',
+        email: localUser?.email || undefined
+      };
     }
   }
 }

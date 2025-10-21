@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,275 +9,235 @@ import {
   Alert,
   Switch,
   Modal,
-  TextInput
-} from 'react-native';
-import { useTheme } from '../../../app/providers/ThemeProvider';
-import authService from '../../../services/auth/authService';
-import { databaseService } from '../../../services';
+  TextInput,
+} from "react-native";
+import { useTheme } from "../../../app/providers/ThemeProvider";
+import authService from "../../../services/auth/authService";
+import { databaseService } from "../../../services";
 
+// Main profile screen component
 const ProfileScreen = ({ navigation }) => {
+  // Get theme and toggleTheme from ThemeProvider
   const { theme, toggleTheme } = useTheme();
+  // State variables for user info, modal, edit type, form data, and stats
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editType, setEditType] = useState(''); // 'name', 'email', 'password'
+  const [editType, setEditType] = useState(""); // 'name', 'email', 'password'
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [stats, setStats] = useState({
-    totalExpenses: 0,
-    totalCategories: 0,
-    averageMonthlySpending: 0,
-    accountAge: 0
+    name: "",
+    email: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
 
+  // Load user info from local DB on mount
   useEffect(() => {
-    loadUserData();
-    loadUserStats();
+    let isMounted = true;
+    const fetchUserFromDB = async () => {
+      setLoading(true);
+      setUser(null);
+      const currentUser = authService.getCurrentUser();
+      console.log('[ProfileScreen] currentUser:', currentUser);
+      let dbUser = null;
+      if (currentUser && currentUser.email) {
+        // Fetch local user by email to get integer id
+        const localUser = await databaseService.getUserByEmail(currentUser.email);
+        console.log('[ProfileScreen] localUser:', localUser);
+        if (localUser && typeof localUser.id === 'number') {
+          dbUser = await databaseService.getUserById(localUser.id);
+          console.log('[ProfileScreen] dbUser:', dbUser);
+        } else {
+          console.log('[ProfileScreen] No localUser or missing integer id');
+        }
+      } else {
+        console.log('[ProfileScreen] No currentUser or missing email');
+      }
+      if (isMounted) {
+        setUser(dbUser);
+        setLoading(false);
+        if (dbUser) {
+          setFormData((prev) => ({
+            ...prev,
+            name: dbUser.name || "",
+            email: dbUser.email || "",
+          }));
+        }
+      }
+    };
+    fetchUserFromDB();
+    return () => { isMounted = false; };
   }, []);
 
-  const loadUserData = () => {
-    const currentUser = authService.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      setFormData(prev => ({
-        ...prev,
-        name: currentUser.name || '',
-        email: currentUser.email || ''
-      }));
-    }
-  };
-
-  const loadUserStats = async () => {
-    try {
-      const currentUser = authService.getCurrentUser();
-      if (!currentUser) return;
-
-      // Load expenses
-      const expenses = await databaseService.getExpensesByUser(currentUser.id);
-      const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-      // Load categories
-      const categories = await databaseService.getCategoriesByUser(currentUser.id);
-      const totalCategories = categories.filter(cat => cat.is_active).length;
-
-      // Calculate average monthly spending (last 12 months)
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-      
-      const recentExpenses = expenses.filter(expense => 
-        new Date(expense.created_at) >= twelveMonthsAgo
-      );
-      
-      const monthlyExpenses = recentExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-      const averageMonthlySpending = monthlyExpenses / 12;
-
-      // Calculate account age
-      const createdDate = new Date(currentUser.created_at);
-      const now = new Date();
-      const accountAge = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24)); // days
-
-      setStats({
-        totalExpenses,
-        totalCategories,
-        averageMonthlySpending,
-        accountAge
-      });
-    } catch (error) {
-      console.error('Error loading user stats:', error);
-    }
-  };
-
+  // Open modal to edit profile field
   const openEditModal = (type) => {
     setEditType(type);
     setModalVisible(true);
   };
 
+  // Save profile changes (name, email, password)
   const handleSaveProfile = async () => {
     try {
       let updatedData = {};
 
-      if (editType === 'name') {
+      if (editType === "name") {
         if (!formData.name.trim()) {
-          Alert.alert('Error', 'Name cannot be empty');
+          Alert.alert("Error", "Name cannot be empty");
           return;
         }
         updatedData.name = formData.name.trim();
-      } else if (editType === 'email') {
+      } else if (editType === "email") {
         if (!formData.email.trim()) {
-          Alert.alert('Error', 'Email cannot be empty');
+          Alert.alert("Error", "Email cannot be empty");
           return;
         }
         if (!isValidEmail(formData.email)) {
-          Alert.alert('Error', 'Please enter a valid email address');
+          Alert.alert("Error", "Please enter a valid email address");
           return;
         }
         updatedData.email = formData.email.trim();
-      } else if (editType === 'password') {
-        if (!formData.currentPassword || !formData.newPassword || !formData.confirmPassword) {
-          Alert.alert('Error', 'All password fields are required');
+      } else if (editType === "password") {
+        if (
+          !formData.currentPassword ||
+          !formData.newPassword ||
+          !formData.confirmPassword
+        ) {
+          Alert.alert("Error", "All password fields are required");
           return;
         }
         if (formData.newPassword !== formData.confirmPassword) {
-          Alert.alert('Error', 'New passwords do not match');
+          Alert.alert("Error", "New passwords do not match");
           return;
         }
         if (formData.newPassword.length < 6) {
-          Alert.alert('Error', 'New password must be at least 6 characters long');
+          Alert.alert(
+            "Error",
+            "New password must be at least 6 characters long"
+          );
           return;
         }
 
         // Verify current password
         const isCurrentPasswordValid = await authService.verifyPassword(
-          user.email, 
+          user.email,
           formData.currentPassword
         );
-        
+
         if (!isCurrentPasswordValid) {
-          Alert.alert('Error', 'Current password is incorrect');
+          Alert.alert("Error", "Current password is incorrect");
           return;
         }
 
         updatedData.password = formData.newPassword;
       }
 
-      // Update user data
-      const updatedUser = await authService.updateUser(user.id, updatedData);
-      setUser(updatedUser);
-      
-      // Reset form
-      setFormData(prev => ({
+      // Always use the local SQLite user id (integer) for updates
+      const localUser = await databaseService.getUserByEmail(user.email);
+      if (!localUser || typeof localUser.id !== "number") {
+        Alert.alert("Error", "Could not find local user record for update.");
+        return;
+      }
+
+      // Update user data in local DB
+      await authService.updateUser(localUser.id, updatedData);
+      // Reload user from local DB by id
+      const refreshedUser = await databaseService.getUserById(localUser.id);
+      setUser(refreshedUser);
+      authService.currentUser = refreshedUser;
+      // Also update formData to reflect latest user info
+      setFormData((prev) => ({
         ...prev,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+        name: refreshedUser.name || "",
+        email: refreshedUser.email || "",
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
       }));
-      
       setModalVisible(false);
-      Alert.alert('Success', 'Profile updated successfully!');
+      Alert.alert("Success", "Profile updated successfully!");
     } catch (error) {
-      console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      console.error("Error updating profile:", error);
+      Alert.alert("Error", "Failed to update profile");
     }
   };
 
+  // Simple email validation
+  // Simple email validation - matches backend requirements
   const isValidEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Require valid domain with at least 2 character TLD (.com, .net, etc)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     return emailRegex.test(email);
   };
 
+  // Show logout confirmation and log out user
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            authService.logout();
-            navigation.replace('Login');
-          }
-        }
-      ]
-    );
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: () => {
+          authService.logout();
+          navigation.replace("Login");
+        },
+      },
+    ]);
   };
 
+  // Format number as currency
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
 
-  const renderStatsCard = () => (
-    <View style={[styles.statsCard, { backgroundColor: theme.colors.card }]}>
-      <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-        Account Statistics 📊
-      </Text>
-      
-      <View style={styles.statsGrid}>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-            {formatCurrency(stats.totalExpenses)}
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-            Total Expenses
-          </Text>
-        </View>
-        
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-            {stats.totalCategories}
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-            Active Categories
-          </Text>
-        </View>
-        
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-            {formatCurrency(stats.averageMonthlySpending)}
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-            Avg Monthly Spending
-          </Text>
-        </View>
-        
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-            {stats.accountAge} days
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-            Account Age
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-
+  // Render card with profile info and edit buttons
   const renderProfileCard = () => (
     <View style={[styles.profileCard, { backgroundColor: theme.colors.card }]}>
       <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
         Profile Information 👤
       </Text>
-      
+
       <View style={styles.profileRow}>
         <View style={styles.profileInfo}>
-          <Text style={[styles.profileLabel, { color: theme.colors.textSecondary }]}>
+          <Text
+            style={[styles.profileLabel, { color: theme.colors.textSecondary }]}
+          >
             Name
           </Text>
           <Text style={[styles.profileValue, { color: theme.colors.text }]}>
-            {user?.name || 'Not set'}
+            {user?.name || "Not set"}
           </Text>
         </View>
         <TouchableOpacity
           style={[styles.editButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => openEditModal('name')}
+          onPress={() => openEditModal("name")}
         >
           <Text style={styles.editButtonText}>Edit</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.profileRow}>
         <View style={styles.profileInfo}>
-          <Text style={[styles.profileLabel, { color: theme.colors.textSecondary }]}>
+          <Text
+            style={[styles.profileLabel, { color: theme.colors.textSecondary }]}
+          >
             Email
           </Text>
           <Text style={[styles.profileValue, { color: theme.colors.text }]}>
-            {user?.email || 'Not set'}
+            {user?.email || "Not set"}
           </Text>
         </View>
         <TouchableOpacity
           style={[styles.editButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => openEditModal('email')}
+          onPress={() => openEditModal("email")}
         >
           <Text style={styles.editButtonText}>Edit</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.profileRow}>
         <View style={styles.profileInfo}>
-          <Text style={[styles.profileLabel, { color: theme.colors.textSecondary }]}>
+          <Text
+            style={[styles.profileLabel, { color: theme.colors.textSecondary }]}
+          >
             Password
           </Text>
           <Text style={[styles.profileValue, { color: theme.colors.text }]}>
@@ -286,7 +246,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
         <TouchableOpacity
           style={[styles.editButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => openEditModal('password')}
+          onPress={() => openEditModal("password")}
         >
           <Text style={styles.editButtonText}>Change</Text>
         </TouchableOpacity>
@@ -294,31 +254,38 @@ const ProfileScreen = ({ navigation }) => {
     </View>
   );
 
+  // Render card with app settings (theme toggle)
   const renderSettingsCard = () => (
     <View style={[styles.settingsCard, { backgroundColor: theme.colors.card }]}>
       <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
         App Settings ⚙️
       </Text>
-      
+
       <View style={styles.settingRow}>
         <View style={styles.settingInfo}>
           <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
             Dark Mode
           </Text>
-          <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+          <Text
+            style={[
+              styles.settingDescription,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
             Switch between light and dark themes
           </Text>
         </View>
         <Switch
           value={theme.isDark}
           onValueChange={toggleTheme}
-          trackColor={{ false: '#767577', true: theme.colors.primary }}
-          thumbColor={'#f4f3f4'}
+          trackColor={{ false: "#767577", true: theme.colors.primary }}
+          thumbColor={"#f4f3f4"}
         />
       </View>
     </View>
   );
 
+  // Render modal for editing profile fields
   const renderEditModal = () => (
     <Modal
       animationType="slide"
@@ -327,65 +294,89 @@ const ProfileScreen = ({ navigation }) => {
       onRequestClose={() => setModalVisible(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
           <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-            {editType === 'name' && 'Edit Name'}
-            {editType === 'email' && 'Edit Email'}
-            {editType === 'password' && 'Change Password'}
+            {editType === "name" && "Edit Name"}
+            {editType === "email" && "Edit Email"}
+            {editType === "password" && "Change Password"}
           </Text>
 
-          {editType === 'name' && (
+          {editType === "name" && (
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Name</Text>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Name
+              </Text>
               <TextInput
-                style={[styles.input, { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.text
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.text,
+                  },
+                ]}
                 placeholder="Enter your name"
                 placeholderTextColor={theme.colors.textSecondary}
                 value={formData.name}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
+                onChangeText={(text) =>
+                  setFormData((prev) => ({ ...prev, name: text }))
+                }
               />
             </View>
           )}
 
-          {editType === 'email' && (
+          {editType === "email" && (
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email</Text>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Email
+              </Text>
               <TextInput
-                style={[styles.input, { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.text
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.inputBackground,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.text,
+                  },
+                ]}
                 placeholder="Enter your email"
                 placeholderTextColor={theme.colors.textSecondary}
                 value={formData.email}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+                onChangeText={(text) =>
+                  setFormData((prev) => ({ ...prev, email: text }))
+                }
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
             </View>
           )}
 
-          {editType === 'password' && (
+          {editType === "password" && (
             <>
               <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
                   Current Password
                 </Text>
                 <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text
-                  }]}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
                   placeholder="Enter current password"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={formData.currentPassword}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, currentPassword: text }))}
+                  onChangeText={(text) =>
+                    setFormData((prev) => ({ ...prev, currentPassword: text }))
+                  }
                   secureTextEntry
                 />
               </View>
@@ -395,15 +386,20 @@ const ProfileScreen = ({ navigation }) => {
                   New Password
                 </Text>
                 <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text
-                  }]}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
                   placeholder="Enter new password"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={formData.newPassword}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, newPassword: text }))}
+                  onChangeText={(text) =>
+                    setFormData((prev) => ({ ...prev, newPassword: text }))
+                  }
                   secureTextEntry
                 />
               </View>
@@ -413,15 +409,20 @@ const ProfileScreen = ({ navigation }) => {
                   Confirm New Password
                 </Text>
                 <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.inputBackground,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text
-                  }]}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
                   placeholder="Confirm new password"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={formData.confirmPassword}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, confirmPassword: text }))}
+                  onChangeText={(text) =>
+                    setFormData((prev) => ({ ...prev, confirmPassword: text }))
+                  }
                   secureTextEntry
                 />
               </View>
@@ -430,14 +431,26 @@ const ProfileScreen = ({ navigation }) => {
 
           <View style={styles.modalActions}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton, { borderColor: theme.colors.border }]}
+              style={[
+                styles.modalButton,
+                styles.cancelButton,
+                { borderColor: theme.colors.border },
+              ]}
               onPress={() => setModalVisible(false)}
             >
-              <Text style={[styles.cancelButtonText, { color: theme.colors.text }]}>Cancel</Text>
+              <Text
+                style={[styles.cancelButtonText, { color: theme.colors.text }]}
+              >
+                Cancel
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.modalButton, styles.saveButton, { backgroundColor: theme.colors.primary }]}
+              style={[
+                styles.modalButton,
+                styles.saveButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
               onPress={handleSaveProfile}
             >
               <Text style={styles.saveButtonText}>Save</Text>
@@ -448,7 +461,8 @@ const ProfileScreen = ({ navigation }) => {
     </Modal>
   );
 
-  if (!user) {
+  // Show loading state if user info not loaded
+  if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.loadingContainer}>
@@ -459,15 +473,31 @@ const ProfileScreen = ({ navigation }) => {
       </SafeAreaView>
     );
   }
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Profile not found.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  // Main render: header, stats, profile, settings, logout, edit modal
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
           Profile 👤
         </Text>
-        <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
+        <Text
+          style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}
+        >
           Manage your account and preferences
         </Text>
       </View>
@@ -478,13 +508,12 @@ const ProfileScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderStatsCard()}
         {renderProfileCard()}
         {renderSettingsCard()}
 
         {/* Logout Button */}
         <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: '#FF4444' }]}
+          style={[styles.logoutButton, { backgroundColor: "#FF4444" }]}
           onPress={handleLogout}
         >
           <Text style={styles.logoutButtonText}>Logout</Text>
@@ -502,8 +531,8 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     fontSize: 16,
@@ -514,7 +543,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   headerSubtitle: {
     fontSize: 14,
@@ -534,27 +563,27 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 16,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   statItem: {
-    width: '48%',
-    alignItems: 'center',
+    width: "48%",
+    alignItems: "center",
     marginBottom: 16,
   },
   statValue: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   profileCard: {
     padding: 20,
@@ -562,9 +591,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   profileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   profileInfo: {
@@ -576,7 +605,7 @@ const styles = StyleSheet.create({
   },
   profileValue: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   editButton: {
     paddingHorizontal: 12,
@@ -584,9 +613,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   editButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   settingsCard: {
     padding: 20,
@@ -594,16 +623,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   settingInfo: {
     flex: 1,
   },
   settingLabel: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 2,
   },
   settingDescription: {
@@ -612,39 +641,39 @@ const styles = StyleSheet.create({
   logoutButton: {
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   logoutButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    width: '90%',
+    width: "90%",
     maxWidth: 400,
     borderRadius: 12,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: "80%",
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   inputGroup: {
     marginBottom: 16,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   input: {
@@ -654,29 +683,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 20,
   },
   modalButton: {
     flex: 1,
     padding: 14,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelButton: {
     borderWidth: 1,
     marginRight: 8,
   },
   cancelButtonText: {
-    fontWeight: '600',
+    fontWeight: "600",
   },
   saveButton: {
     marginLeft: 8,
   },
   saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: "#FFFFFF",
+    fontWeight: "bold",
   },
 });
 

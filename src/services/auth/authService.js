@@ -349,6 +349,7 @@ class AuthService {
   }
 
   // Login user - HYBRID: Try API-first, fallback to local
+  // Authenticate user with email/password - tries backend API first, falls back to local database if offline
   async login(email, password) {
     try {
       if (!email || !password) {
@@ -421,7 +422,7 @@ class AuthService {
       const user = await databaseService.getUserByEmail(email.toLowerCase());
 
       if (!user) {
-        throw new Error('Invalid email or password');
+        throw new Error('User not found. Please register first.');
       }
 
       // Hash the provided password and compare
@@ -505,6 +506,34 @@ class AuthService {
       };
     } catch (error) {
       console.error('Logout error:', error);
+      throw error;
+    }
+  }
+
+  // Update user (exposed for UI) - updates local DB, optionally hashes password
+  async updateUser(userId, updateData) {
+    try {
+      // If password is provided, hash it and update password separately
+      if (updateData.password) {
+        const hashed = await this.hashPassword(updateData.password);
+        // Update password in DB
+        await databaseService.updateUserPassword(userId, hashed);
+        // Remove password from updateData to avoid attempting to write into email/name query
+        delete updateData.password;
+      }
+
+      // Delegate to database service for name/email updates and queue sync
+      const updatedUser = await databaseService.updateUser(userId, updateData);
+
+      // Persist updated user in authService storage
+      await this.saveUserData(updatedUser);
+
+      // Update in-memory currentUser
+      this.currentUser = updatedUser;
+
+      return updatedUser;
+    } catch (error) {
+      console.error('Error in authService.updateUser:', error);
       throw error;
     }
   }

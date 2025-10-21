@@ -108,6 +108,9 @@ class DatabaseService {
         name TEXT NOT NULL,
         currency TEXT DEFAULT 'EUR',
         financial_goals TEXT,
+        needs_sync BOOLEAN DEFAULT 1,
+        api_id TEXT,
+        synced_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -239,6 +242,15 @@ class DatabaseService {
       `);
     } catch (error) {
       // Column already exists - this is fine
+    }
+
+    // Add sync columns to users table if they don't exist (migration)
+    try {
+      await this.db.execAsync(`ALTER TABLE users ADD COLUMN needs_sync BOOLEAN DEFAULT 1`);
+      await this.db.execAsync(`ALTER TABLE users ADD COLUMN api_id TEXT`);
+      await this.db.execAsync(`ALTER TABLE users ADD COLUMN synced_at DATETIME`);
+    } catch (error) {
+      // Columns already exist - this is fine
     }
 
     // Add frequency column to income table if it doesn't exist
@@ -381,6 +393,54 @@ class DatabaseService {
     }
   }
 
+  // Update user (name/email) and mark for sync
+  async updateUser(userId, updateData) {
+    try {
+      await this.ensureInitialized();
+
+      if (!this.db) throw new Error('Database not initialized');
+
+      const fields = [];
+      const params = [];
+
+      if (updateData.name) {
+        fields.push('name = ?');
+        params.push(updateData.name);
+      }
+      if (updateData.email) {
+        fields.push('email = ?');
+        params.push(updateData.email.toLowerCase());
+      }
+
+      if (fields.length === 0) {
+        // Nothing to update
+        return await this.getUserById(userId);
+      }
+
+      // Always mark record as needing sync when updating profile fields
+      const updateQuery = `UPDATE users SET ${fields.join(', ')}, needs_sync = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      params.push(userId);
+
+      await this.db.runAsync(updateQuery, params);
+
+      // Return updated record
+      const updatedUser = await this.getUserById(userId);
+
+      // Queue user for background sync
+      try {
+        const { default: syncManager } = await import('../sync/syncManager');
+        syncManager.queueForSync('user', 'update', updatedUser);
+      } catch (queueErr) {
+        console.warn('Could not queue user sync:', queueErr);
+      }
+
+      return updatedUser;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  }
+
   // Income operations - LOCAL-FIRST with sync
   async createIncome(userId, incomeData) {
     try {
@@ -510,19 +570,14 @@ async fixMissingApiIds(userId) {
   try {
     await this.ensureInitialized();
     
-    // Find incomes that were created but never got an api_id
     const brokenIncomes = await this.db.getAllAsync(
       'SELECT * FROM income WHERE user_id = ? AND (api_id IS NULL OR api_id = "") AND needs_sync = 1',
       [userId]
     );
     
-    console.log(`Found ${brokenIncomes.length} incomes with missing api_id`);
-    
-    // Re-queue them for creation (they'll get proper api_id)
     const { default: syncManager } = await import('../sync/syncManager');
     
     for (const income of brokenIncomes) {
-      console.log('Re-queuing income for sync:', income.id, income.source);
       syncManager.queueForSync('income', 'create', income);
     }
     
@@ -541,33 +596,20 @@ async deleteIncome(incomeId) {
       throw new Error('Database not initialized');
     }
     
-    // Get income data before deletion (for API sync) - FIXED QUERY
     const income = await this.db.getFirstAsync(
       'SELECT * FROM income WHERE id = ?', 
       [incomeId]
     );
     
     if (!income) {
-      console.log('Income not found for deletion:', incomeId);
       return false;
     }
     
-    console.log('Deleting income with data:', {
-      id: income.id,
-      api_id: income.api_id,
-      source: income.source
-    });
-    
-    // Delete locally immediately
     await this.db.runAsync('DELETE FROM income WHERE id = ?', [incomeId]);
     
-    // Queue for sync (if it was previously synced OR if it has api_id)
     if (income && income.api_id) {
       const { default: syncManager } = await import('../sync/syncManager');
       syncManager.queueForSync('income', 'delete', income);
-      console.log('Queued income for deletion sync:', income.api_id);
-    } else {
-      console.log('Income not queued for sync - no api_id found:', incomeId);
     }
     
     return true;
@@ -591,7 +633,6 @@ async deleteIncome(incomeId) {
         [userId, c.name, c.color, c.icon]
       );
     }
-    console.log('[CAT] Created default categories for user:', userId);
   } catch (err) {
     console.error('[CAT] Create defaults error:', err);
   }
@@ -622,13 +663,6 @@ async deleteIncome(incomeId) {
             isRecurring ? 1 : 0, recurrenceEnd || null, isActive === 0 ? 0 : 1
           ]
         );
-
-      console.log('[DB] Created expense (local)', {
-          id: result.lastInsertRowId,
-          userId,
-          ...expenseData,
-          needs_sync: true
-        });
       
       const newExpense = { 
         id: result.lastInsertRowId, 
