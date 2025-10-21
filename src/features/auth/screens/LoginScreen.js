@@ -163,8 +163,23 @@ const LoginScreen = ({ navigation }) => {
     } catch (error) {
       console.error("Login error:", error);
 
-      // Handle different types of errors
+      // Display user-friendly error messages based on error type
       if (
+        error.message.toLowerCase().includes("user not found")
+      ) {
+        Alert.alert(
+          "User Not Found",
+          "This account is not registered. Please sign up first.",
+          [
+            { 
+              text: "Sign Up", 
+              onPress: handleSignUp,
+              style: "default"
+            },
+            { text: "Cancel", style: "cancel" },
+          ]
+        );
+      } else if (
         error.message.includes("network") ||
         error.message.includes("fetch")
       ) {

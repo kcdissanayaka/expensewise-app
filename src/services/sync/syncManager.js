@@ -51,7 +51,7 @@ class SyncManager {
   async queueForSync(type, action, data) {
     const queueItem = {
       id: Date.now() + Math.random(),
-      type, // 'expense', 'income', 'category', 'allocation'
+      type, // 'expense', 'income', 'category', 'allocation', 'user'
       action, // 'create', 'update', 'delete'
       data,
       timestamp: Date.now(),
@@ -64,8 +64,6 @@ class SyncManager {
       const queue = JSON.parse(existingQueue);
       queue.push(queueItem);
       await AsyncStorage.setItem('sync_queue', JSON.stringify(queue));
-      
-      console.log(`Queued for sync: ${type} ${action}`, data);
       
       // Try immediate sync if online
       if (this.isOnline && !this.isSyncing) {
@@ -82,46 +80,32 @@ class SyncManager {
 
     try {
       this.isSyncing = true;
-      console.log('Starting sync...');
 
-      // Get pending items from persistent storage
       const queueStr = await AsyncStorage.getItem('sync_queue') || '[]';
       const queue = JSON.parse(queueStr);
 
       if (queue.length === 0) {
-        console.log('Nothing to sync');
         return;
       }
-
-      console.log(`Processing ${queue.length} sync items`);
 
       const processedItems = [];
       const failedItems = [];
 
-      // Process each queued item
       for (const item of queue) {
         try {
           await this.syncItem(item);
           processedItems.push(item);
-          console.log(`Successfully synced: ${item.type} ${item.action}`);
         } catch (error) {
           console.error('Sync failed:', item.type, item.action, error);
           
-          // Retry logic
           item.retries = (item.retries || 0) + 1;
           if (item.retries < 3) {
-            failedItems.push(item); // Keep for retry
-            console.log(`Will retry ${item.type} ${item.action} (attempt ${item.retries})`);
-          } else {
-            console.log(`Giving up on ${item.type} ${item.action} after ${item.retries} attempts`);
+            failedItems.push(item);
           }
         }
       }
 
-      // Update persistent queue (remove processed, keep failed)
       await AsyncStorage.setItem('sync_queue', JSON.stringify(failedItems));
-
-      console.log(`Sync completed. Processed: ${processedItems.length}, Failed: ${failedItems.length}`);
 
     } catch (error) {
       console.error('Sync process error:', error);
@@ -137,6 +121,8 @@ class SyncManager {
         return await this.syncExpense(item);
       case 'income':
         return await this.syncIncome(item);
+      case 'user':
+        return await this.syncUser(item);
       case 'allocation':
         return await this.syncAllocation(item);
       default:
@@ -144,10 +130,57 @@ class SyncManager {
     }
   }
 
+  // Sync user profile updates to backend
+  async syncUser(item) {
+    const { action, data } = item;
+
+    if (action !== 'update') {
+      return;
+    }
+
+    try {
+      const SyncService = (await import('./syncService')).default;
+      const payload = await SyncService._transformUserForBackend(data);
+
+      const resp = await apiService.request('/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+
+      const apiId = resp?.user?._id || resp?.user?.id || resp?.id || null;
+
+      if (data.id) {
+        await databaseService.markAsSynced('users', data.id, apiId);
+      }
+
+      return;
+    } catch (error) {
+      console.error('Failed to sync user:', error);
+      
+      // Detect if user account was deleted from backend (404 or "not found" errors)
+      if (
+        error.message.includes('404') ||
+        error.message.toLowerCase().includes('user not found') ||
+        error.message.toLowerCase().includes('user does not exist') ||
+        error.message.toLowerCase().includes('account not found')
+      ) {
+        // User deleted from backend - logout locally and redirect to login screen
+        console.warn('User account deleted from backend, logging out...');
+        await authService.logout();
+        
+        // Trigger global event for app-level navigation handling
+        if (global.onUserDeletedFromBackend) {
+          global.onUserDeletedFromBackend();
+        }
+      }
+      
+      throw error;
+    }
+  }
+
   // Sync expense operations
   async syncExpense(item) {
     const { action, data } = item;
-    console.log(`Syncing expense: ${action}`, data);
 
     switch (action) {
       case 'create':
@@ -161,9 +194,6 @@ class SyncManager {
         };
         
         const expenseApiResponse = await apiService.createExpense(createExpenseData);
-        console.log('Expense created in backend:', expenseApiResponse);
-        
-        // Update local record with API ID
         await databaseService.markAsSynced('expenses', data.id, expenseApiResponse.expense._id || expenseApiResponse.id);
         break;
         
@@ -177,23 +207,19 @@ class SyncManager {
           category: data.category_name || 'other'
         };
         
-        // Use api_id for updates, fallback to id if api_id doesn't exist
         const updateExpenseId = data.api_id;
         if (!updateExpenseId) {
-          throw new Error('Cannot update expense: No API ID found. Expense may not be synced yet.');
+          throw new Error('Cannot update expense: No API ID found.');
         }
         
-        console.log('Updating expense in backend with ID:', updateExpenseId);
         await apiService.updateExpense(updateExpenseId, updateExpenseData);
         await databaseService.markAsSynced('expenses', data.id);
         break;
         
       case 'delete':
-        // Use api_id for deletes, fallback to id if api_id doesn't exist
         const deleteExpenseId = data.api_id;
         if (!deleteExpenseId) {
-          console.log('Cannot delete expense from backend: No API ID found. Deleting locally only.');
-          return; // Just delete locally if never synced
+          return;
         }
         
         await apiService.deleteExpense(deleteExpenseId);
@@ -207,11 +233,9 @@ class SyncManager {
   // Sync income operations
   async syncIncome(item) {
     const { action, data } = item;
-    console.log(`Syncing income: ${action}`, data);
 
     switch (action) {
       case 'create':
-        // Prepare data for backend (map fields)
         const createData = {
           source: data.source,
           amount: data.amount,
@@ -220,21 +244,15 @@ class SyncManager {
           category: data.type === 'primary' ? 'salary' : 'freelance',
           isRecurring: true,
           description: data.source,
-          api_id: data.id // Include SQLite ID for reference
+          api_id: data.id
         };
         
-        console.log('Creating income in backend with data:', createData);
         const apiResponse = await apiService.createIncome(createData);
-        console.log('Income created in backend:', apiResponse);
-        
-        // Update local record with MongoDB ObjectId
         const mongoDbId = apiResponse.income?._id || apiResponse._id || apiResponse.id;
         await databaseService.markAsSynced('income', data.id, mongoDbId);
-        console.log('Local income marked as synced with API ID:', mongoDbId);
         break;
         
       case 'update':
-        // Prepare data for backend (map fields)
         const updateData = {
           source: data.source,
           amount: data.amount,
@@ -245,38 +263,26 @@ class SyncManager {
           description: data.source,
         };
         
-        // Handle missing api_id by finding the MongoDB record
         let updateIncomeId = data.api_id;
         
         if (!updateIncomeId) {
-          console.log('No API ID found, creating as new income since no API ID exists...');
           const newApiResponse = await apiService.createIncome(updateData);
           const newMongoDbId = newApiResponse.income?._id || newApiResponse._id || newApiResponse.id;
-          
-          // Update local record with the new API ID
           await databaseService.markAsSynced('income', data.id, newMongoDbId);
-          console.log('Created new income in backend and updated local API ID:', newMongoDbId);
-          return; // Exit early since we handled this as a create
-        }
-        
-        console.log('Updating income in backend with ID:', updateIncomeId);
-        console.log('Update data:', updateData);
-        await apiService.updateIncome(updateIncomeId, updateData);
-        await databaseService.markAsSynced('income', data.id);
-        console.log('Income updated successfully in backend');
-        break;
-        
-      case 'delete':
-        // Use api_id for deletes
-        const deleteIncomeId = data.api_id;
-        if (!deleteIncomeId) {
-          console.log('Cannot delete from backend: No API ID found. Deleting locally only.');
           return;
         }
         
-        console.log('Deleting income from backend with ID:', deleteIncomeId);
+        await apiService.updateIncome(updateIncomeId, updateData);
+        await databaseService.markAsSynced('income', data.id);
+        break;
+        
+      case 'delete':
+        const deleteIncomeId = data.api_id;
+        if (!deleteIncomeId) {
+          return;
+        }
+        
         await apiService.deleteIncome(deleteIncomeId);
-        console.log('Income deleted successfully from backend');
         break;
         
       default:
@@ -412,7 +418,6 @@ class SyncManager {
 
   // Manual sync trigger
   async manualSync() {
-    console.log('Manual sync triggered');
     await this.syncAll();
   }
 
@@ -436,40 +441,6 @@ class SyncManager {
         pendingItems: 0,
         queue: []
       };
-    }
-  }
-
-  // Clear sync queue (for debugging)
-  async clearSyncQueue() {
-    try {
-      await AsyncStorage.setItem('sync_queue', '[]');
-      console.log('Sync queue cleared');
-    } catch (error) {
-      console.error('Error clearing sync queue:', error);
-    }
-  }
-
-  // Force sync specific item types
-  async forceSyncType(type) {
-    console.log(`Force syncing ${type}...`);
-    const queueStr = await AsyncStorage.getItem('sync_queue') || '[]';
-    const queue = JSON.parse(queueStr);
-    
-    const filteredQueue = queue.filter(item => item.type === type);
-    
-    if (filteredQueue.length === 0) {
-      console.log(`No ${type} items to sync`);
-      return;
-    }
-    
-    console.log(`Force syncing ${filteredQueue.length} ${type} items`);
-    
-    for (const item of filteredQueue) {
-      try {
-        await this.syncItem(item);
-      } catch (error) {
-        console.error(`Force sync failed for ${type}:`, error);
-      }
     }
   }
 }
