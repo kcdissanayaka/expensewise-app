@@ -267,15 +267,16 @@ const ReportsScreen = ({ navigation }) => {
   );
 
   const renderPieChart = () => {
-    if (!reportData.categoryBreakdown || reportData.categoryBreakdown.length === 0) {
-      return null;
-    }
+    const raw = reportData.categoryBreakdown || [];
+    // Defensive: filter out any falsy/invalid entries
+    const breakdown = raw.filter(cat => cat && typeof cat === 'object' && cat.name && (cat.amount !== undefined));
+    if (breakdown.length === 0) return null;
 
     // Map to format expected by react-native-chart-kit PieChart
-    const data = reportData.categoryBreakdown.map(cat => ({
-      name: cat.name,
-      amount: cat.amount,
-      color: cat.color,
+    const data = breakdown.map(cat => ({
+      name: cat.name || 'Unknown',
+      amount: typeof cat.amount === 'number' ? cat.amount : 0,
+      color: cat.color || '#CCCCCC',
       legendFontColor: theme.colors.text,
       legendFontSize: 12
     }));
@@ -294,13 +295,13 @@ const ReportsScreen = ({ navigation }) => {
         />
         {/* Compact legend: color dot, label, percentage */}
         <View style={styles.legendContainer}>
-          {reportData.categoryBreakdown.slice(0, 6).map((cat) => (
-            <View key={cat.id} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
+          {breakdown.slice(0, 6).map((cat) => (
+            <View key={cat.id || cat.name} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: cat.color || '#CCCCCC' }]} />
               <Text style={[styles.legendLabel, { color: theme.colors.text }]} numberOfLines={1} ellipsizeMode="tail">
                 {cat.name}
               </Text>
-              <Text style={[styles.legendPercent, { color: theme.colors.textSecondary }]}> {cat.percentage.toFixed(1)}% </Text>
+              <Text style={[styles.legendPercent, { color: theme.colors.textSecondary }]}> {Number(cat.percentage || 0).toFixed(1)}% </Text>
             </View>
           ))}
         </View>
