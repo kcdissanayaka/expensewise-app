@@ -276,8 +276,13 @@ class AuthService {
         
         if (apiResponse.success && apiResponse.data?.user && apiResponse.token) {
           
-          // Save JWT token
+          // Save JWT access token
           await this.saveToken(apiResponse.token);
+          
+          // Save refresh token if provided
+          if (apiResponse.refreshToken) {
+            await AsyncStorage.setItem('@ExpenseWise:refreshToken', apiResponse.refreshToken);
+          }
           
           // Save user data
           await this.saveUserData(apiResponse.data.user);
@@ -348,7 +353,6 @@ class AuthService {
     }
   }
 
-  // Login user - HYBRID: Try API-first, fallback to local
   // Authenticate user with email/password - tries backend API first, falls back to local database if offline
   async login(email, password) {
     try {
@@ -365,11 +369,40 @@ class AuthService {
         const apiService = (await import('../api/apiService')).default;
         const apiResponse = await apiService.loginWithAPI(email, password);
         
+        console.log('API login response in authService:', {
+          hasUser: !!apiResponse.user,
+          hasToken: !!apiResponse.token,
+          tokenPreview: apiResponse.token ? `${apiResponse.token.substring(0, 30)}...` : 'NULL'
+        });
+        
         // Check for successful login
         if (apiResponse.user && apiResponse.token) {
-          // Save the API token
-          if (apiResponse.token) {
-            await this.saveToken(apiResponse.token);
+          // Save the access token
+          console.log('💾 Saving access token to AsyncStorage');
+          await this.saveToken(apiResponse.token);
+          
+          // Save the refresh token if provided
+          if (apiResponse.refreshToken) {
+            console.log('💾 Saving refresh token to AsyncStorage');
+            await AsyncStorage.setItem('@ExpenseWise:refreshToken', apiResponse.refreshToken);
+          } else {
+            console.warn('⚠️ No refresh token in login response');
+          }
+          
+          // CRITICAL: Also set token in apiService immediately so subsequent requests work
+          apiService.setAuthToken(apiResponse.token);
+          console.log('✅ Token set in apiService:', apiResponse.token.substring(0, 50) + '...');
+          
+          // Verify tokens were saved
+          const savedToken = await AsyncStorage.getItem('@ExpenseWise:authToken');
+          const savedRefreshToken = await AsyncStorage.getItem('@ExpenseWise:refreshToken');
+          console.log('✅ Access token verification:', savedToken ? `${savedToken.substring(0, 50)}...` : '❌ NULL');
+          console.log('✅ Refresh token verification:', savedRefreshToken ? 'Present' : '❌ NULL');
+          
+          if (savedToken === apiResponse.token) {
+            console.log('✅✅✅ TOKEN MATCH CONFIRMED - Auth setup complete!');
+          } else {
+            console.error('❌❌❌ TOKEN MISMATCH!');
           }
           
           // Get local user data for conflict resolution
@@ -510,7 +543,7 @@ class AuthService {
     }
   }
 
-  // Update user (exposed for UI) - updates local DB, optionally hashes password
+  // Update user - updates local DB, optionally hashes password
   async updateUser(userId, updateData) {
     try {
       // If password is provided, hash it and update password separately
@@ -603,7 +636,7 @@ class AuthService {
   // Clear all auth data
   async clearAuthData() {
     try {
-      await AsyncStorage.multiRemove(['@ExpenseWise:authToken', '@ExpenseWise:userData']);
+      await AsyncStorage.multiRemove(['@ExpenseWise:authToken', '@ExpenseWise:refreshToken', '@ExpenseWise:userData']);
       this.authToken = null;
       this.currentUser = null;
     } catch (error) {
