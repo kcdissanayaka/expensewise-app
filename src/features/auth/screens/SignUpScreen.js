@@ -93,19 +93,6 @@ const SignUpScreen = ({ navigation }) => {
   // Check if form is valid
   const isFormValid = () => {
     const { name, email, password, confirmPassword } = formData;
-    
-  //   return (
-  //     name.trim().length >= 2 &&
-  //     name.trim().length <= 50 &&
-  //     email.trim().length > 0 &&
-  //     email.trim().length <= 254 &&
-  //     validateEmail(email.trim()) &&
-  //     password.length >= 6 &&
-  //     password.length <= 128 &&
-  //     confirmPassword === password &&
-  //     Object.values(errors).every(error => !error)
-  //   );
-  // };
       return (
         name.trim().length > 0 &&
         email.trim().length > 0 &&
@@ -143,7 +130,7 @@ const SignUpScreen = ({ navigation }) => {
       setErrors(prev => ({ ...prev, password: 'Password is required' }));
       hasErrors = true;
     } else if (password.length < 6) {
-      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters' }));
+      setErrors(prev => ({ ...prev, password: 'Password must be at least 6 characters long and contain letters and numbers' }));
       hasErrors = true;
     }
 

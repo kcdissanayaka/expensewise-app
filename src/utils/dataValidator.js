@@ -1,4 +1,4 @@
-// Data Validation Utility for ExpenseWise
+// Data Validation Utility
 // Ensures data integrity between local and remote storage
 
 export const ValidationResult = {
