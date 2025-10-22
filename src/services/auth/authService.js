@@ -378,31 +378,31 @@ class AuthService {
         // Check for successful login
         if (apiResponse.user && apiResponse.token) {
           // Save the access token
-          console.log('💾 Saving access token to AsyncStorage');
+          console.log('Saving access token to AsyncStorage');
           await this.saveToken(apiResponse.token);
           
           // Save the refresh token if provided
           if (apiResponse.refreshToken) {
-            console.log('💾 Saving refresh token to AsyncStorage');
+            console.log('Saving refresh token to AsyncStorage');
             await AsyncStorage.setItem('@ExpenseWise:refreshToken', apiResponse.refreshToken);
           } else {
-            console.warn('⚠️ No refresh token in login response');
+            console.warn('No refresh token in login response');
           }
           
           // CRITICAL: Also set token in apiService immediately so subsequent requests work
           apiService.setAuthToken(apiResponse.token);
-          console.log('✅ Token set in apiService:', apiResponse.token.substring(0, 50) + '...');
+          console.log('Token set in apiService:', apiResponse.token.substring(0, 50) + '...');
           
           // Verify tokens were saved
           const savedToken = await AsyncStorage.getItem('@ExpenseWise:authToken');
           const savedRefreshToken = await AsyncStorage.getItem('@ExpenseWise:refreshToken');
-          console.log('✅ Access token verification:', savedToken ? `${savedToken.substring(0, 50)}...` : '❌ NULL');
-          console.log('✅ Refresh token verification:', savedRefreshToken ? 'Present' : '❌ NULL');
+          console.log('Access token verification:', savedToken ? `${savedToken.substring(0, 50)}...` : 'NULL');
+          console.log('Refresh token verification:', savedRefreshToken ? 'Present' : 'NULL');
           
           if (savedToken === apiResponse.token) {
-            console.log('✅✅✅ TOKEN MATCH CONFIRMED - Auth setup complete!');
+            console.log('TOKEN MATCH CONFIRMED - Auth setup complete!');
           } else {
-            console.error('❌❌❌ TOKEN MISMATCH!');
+            console.error('TOKEN MISMATCH!');
           }
           
           // Get local user data for conflict resolution

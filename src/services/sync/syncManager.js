@@ -10,7 +10,49 @@ class SyncManager {
     this.isOnline = false;
     this.isSyncing = false;
     this.syncInterval = null;
+  // Cache for category name -> backend MongoDB ObjectId mapping
+  this.categoryMap = null;
     this.setupNetworkListener();
+  }
+
+  // Fetch categories from backend and create mapping
+  async fetchCategoryMapping() {
+    try {
+      // Fetch categories from backend to build mapping of local name -> backend ObjectId
+      const response = await apiService.getCategories();
+      if (response && response.categories) {
+        const mapping = {};
+        response.categories.forEach(cat => {
+          // Map category name (lowercased) to backend MongoDB ObjectId
+          const name = (cat.name || '').toLowerCase().trim();
+          mapping[name] = cat._id || cat.id;
+        });
+        // Store mapping in AsyncStorage for offline use
+        await AsyncStorage.setItem('@ExpenseWise:categoryMap', JSON.stringify(mapping));
+        this.categoryMap = mapping;
+        console.log('Category mapping loaded:', Object.keys(mapping).length, 'categories');
+        return mapping;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch category mapping:', error.message);
+      // If fetch fails, try to load mapping from cache
+      const cached = await AsyncStorage.getItem('@ExpenseWise:categoryMap');
+      if (cached) {
+        this.categoryMap = JSON.parse(cached);
+        console.log('Using cached category mapping');
+      }
+    }
+    return this.categoryMap || {};
+  }
+
+  // Get backend category ID from local category name
+  async getCategoryId(categoryName) {
+    // Returns backend MongoDB ObjectId for given local category name
+    if (!this.categoryMap) {
+      await this.fetchCategoryMapping();
+    }
+    const name = (categoryName || '').toLowerCase().trim();
+    return this.categoryMap?.[name] || null;
   }
 
   // Setup network connectivity listener
@@ -19,10 +61,12 @@ class SyncManager {
       const wasOffline = !this.isOnline;
       this.isOnline = state.isConnected;
 
-      // If we just came back online, start syncing
+      // If we just came back online, fetch categories and start syncing
       if (wasOffline && this.isOnline) {
-        this.startPeriodicSync();
-        this.syncAll();
+        this.fetchCategoryMapping().then(() => {
+          this.startPeriodicSync();
+          this.syncAll();
+        });
       } else if (!this.isOnline) {
         this.stopPeriodicSync();
       }
@@ -80,6 +124,11 @@ class SyncManager {
 
     try {
       this.isSyncing = true;
+
+      // Ensure we have category mapping before syncing expenses
+      if (!this.categoryMap) {
+        await this.fetchCategoryMapping();
+      }
 
       const queueStr = (await AsyncStorage.getItem("sync_queue")) || "[]";
       const queue = JSON.parse(queueStr);
@@ -183,14 +232,33 @@ class SyncManager {
 
     switch (action) {
       case "create":
+        console.log('Syncing expense create:', { 
+          title: data.title, 
+          category_name: data.category_name,
+        });
+        
         const createExpenseData = {
           title: data.title,
           amount: data.amount,
-          description: data.description,
+          description: data.description || data.title || 'Expense',
           dueDate: data.due_date || data.dueDate,
-          status: data.status,
-          category: data.category_name || "other",
+          status: data.status || 'pending',
         };
+        
+        // --- CATEGORY MAPPING FOR BACKEND SYNC ---
+        // Map local category_name to backend categoryId (MongoDB ObjectId)
+        // This ensures the backend receives a valid categoryId
+        if (data.category_name) {
+          const backendCategoryId = await this.getCategoryId(data.category_name);
+          if (backendCategoryId) {
+            createExpenseData.categoryId = backendCategoryId;
+            console.log('Mapped category:', data.category_name, '->', backendCategoryId);
+          } else {
+            console.warn('No backend category found for:', data.category_name);
+          }
+        }
+        
+        console.log('Sending to API:', createExpenseData);
 
         const expenseApiResponse = await apiService.createExpense(
           createExpenseData
@@ -206,11 +274,20 @@ class SyncManager {
         const updateExpenseData = {
           title: data.title,
           amount: data.amount,
-          description: data.description,
+          description: data.description || data.title || 'Expense',
           dueDate: data.due_date || data.dueDate,
-          status: data.status,
-          category: data.category_name || "other",
+          status: data.status || 'pending',
         };
+        
+        // --- CATEGORY MAPPING FOR BACKEND SYNC ---
+        // Map local category_name to backend categoryId (MongoDB ObjectId)
+        // This ensures the backend receives a valid categoryId
+        if (data.category_name) {
+          const backendCategoryId = await this.getCategoryId(data.category_name);
+          if (backendCategoryId) {
+            updateExpenseData.categoryId = backendCategoryId;
+          }
+        }
 
         const updateExpenseId = data.api_id;
         if (!updateExpenseId) {
@@ -482,6 +559,18 @@ class SyncManager {
         pendingItems: 0,
         queue: [],
       };
+    }
+  }
+
+  // Clear sync queue (useful for debugging or after fixing sync issues)
+  async clearSyncQueue() {
+    try {
+      await AsyncStorage.setItem("sync_queue", "[]");
+      console.log("Sync queue cleared successfully");
+      return true;
+    } catch (error) {
+      console.error("Error clearing sync queue:", error);
+      return false;
     }
   }
 }

@@ -10,13 +10,12 @@ export const ConflictStrategy = {
 
 export class ConflictResolver {
   
-  /**
-   * Resolve conflicts between local and remote data
-   * @param {Object} localData - Local data object
-   * @param {Object} remoteData - Remote data object  
-   * @param {string} strategy - Conflict resolution strategy
-   * @returns {Object} Resolved data object
-   */
+   // Resolve conflicts between local and remote data
+   // @param {Object} localData - Local data object
+   // @param {Object} remoteData - Remote data object
+   // @param {string} strategy - Conflict resolution strategy
+   // @returns {Object} Resolved data object
+   
   static resolveConflict(localData, remoteData, strategy = ConflictStrategy.NEWER_WINS) {
     switch (strategy) {
       case ConflictStrategy.LOCAL_WINS:
