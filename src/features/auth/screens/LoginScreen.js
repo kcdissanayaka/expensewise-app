@@ -54,7 +54,7 @@ const LoginScreen = ({ navigation }) => {
     if (text.length > 0 && text.length < 6) {
       setErrors((prev) => ({
         ...prev,
-        password: "Password must be at least 6 characters",
+        password: "Password must be at least 6 characters long and contain letters and numbers",
       }));
     } else {
       setErrors((prev) => ({ ...prev, password: null }));
@@ -100,7 +100,7 @@ const LoginScreen = ({ navigation }) => {
     if (password.length < 6) {
       setErrors((prev) => ({
         ...prev,
-        password: "Password must be at least 6 characters",
+        password: "Password must be at least 6 characters long and contain letters and numbers",
       }));
       return;
     }
