@@ -162,29 +162,35 @@ export class SyncService {
           );
           
           if (localCategory) {
-            // Map common category names to backend-compatible format
+            // Map common category names to backend-compatible format (lowercase)
             const categoryMappings = {
-              'House Rent': 'Housing',
-              'Food & Dining': 'Food',
-              'Transportation': 'Transportation',
-              'Utilities': 'Utilities',
-              'Healthcare': 'Healthcare',
-              'Entertainment': 'Entertainment',
-              'Shopping': 'Shopping',
-              'Travel': 'Travel'
+              'House Rent': 'housing',
+              'Food & Dining': 'food',
+              'Transportation': 'transportation',
+              'Utilities': 'utilities',
+              'Healthcare': 'healthcare',
+              'Entertainment': 'entertainment',
+              'Shopping': 'shopping',
+              'Travel': 'travel',
+              'Personal Care': 'personal',
+              'Education': 'education',
+              'Savings': 'savings',
+              'Insurance': 'insurance',
+              'Gifts': 'gifts',
+              'Donations': 'donations'
             };
             
-            // Use mapped category name or original name
-            const categoryName = categoryMappings[localCategory.name] || localCategory.name;
+            // Use mapped category name or convert original name to lowercase
+            const categoryName = categoryMappings[localCategory.name] || localCategory.name.toLowerCase().replace(/\s+/g, '-');
             
             categoryId = categoryName;
           }
         } catch (error) {
           console.warn('Could not map category, using default:', error);
-          categoryId = 'Other'; // Default category
+          categoryId = 'other'; // Default category (lowercase)
         }
       } else {
-        categoryId = 'Other'; // Default category if no categoryId
+        categoryId = 'other'; // Default category if no categoryId (lowercase)
       }
       
       const backendExpense = {
@@ -205,7 +211,7 @@ export class SyncService {
       return {
         amount: parseFloat(localExpense.amount) || 0,
         description: localExpense.title || 'Manual expense entry',
-        categoryId: 'Other',
+        categoryId: 'other',
         title: localExpense.title || 'Expense',
         date: new Date().toISOString(),
         type: 'Manual',
