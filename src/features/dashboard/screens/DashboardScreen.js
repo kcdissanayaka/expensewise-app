@@ -215,30 +215,6 @@ const DashboardScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.logout();
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              console.error('Logout error:', error);
-            }
-          }
-        }
-      ]
-    );
-  };
 
   const handleResetDatabase = async () => {
     Alert.alert(
@@ -491,19 +467,12 @@ const DashboardScreen = ({ navigation }) => {
 
         {/* Development Controls */}
         <View style={styles.devControls}>
-          <TouchableOpacity 
-            style={[styles.devButton, { backgroundColor: theme.colors.error }]}
-            onPress={handleLogout}
-          >
-            <Text style={styles.devButtonText}>Logout</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
+          {/* <TouchableOpacity 
             style={[styles.devButton, { backgroundColor: '#FF4444' }]}
             onPress={handleResetDatabase}
           >
             <Text style={styles.devButtonText}>🗑️ Reset Database</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,24 +1,22 @@
 import { Platform } from 'react-native';
 
 // API Configuration
+// Using Google Cloud Run hosted backend
 const getApiBaseUrl = () => {
-  if (!__DEV__) {
-    return 'https://your-production-api.com/api'; // Production API URL
-  }
+  // Use Google Cloud hosted backend for all environments
+  return 'https://expensewise-backend1-54x6yj5rca-ew.a.run.app/api';
   
-  // Development environment
-  if (Platform.OS === 'android') {
-    // For Android emulator, use 10.0.2.2 to access host machine
-    // For physical Android device, use your computer's network IP
-    return 'http://10.0.2.2:3000/api';  // Android emulator
-    // return 'http://192.168.1.210:3000/api';  // Physical device - uncomment if needed
-  } else if (Platform.OS === 'ios') {
-    // For iOS simulator, localhost works
-    return 'http://localhost:3000/api';
-  } else {
-    // Web or other platforms
-    return 'http://localhost:3000/api';
-  }
+  // Legacy local development URLs (commented out)
+  // if (!__DEV__) {
+  //   return 'https://your-production-api.com/api';
+  // }
+  // if (Platform.OS === 'android') {
+  //   return 'http://10.0.2.2:3000/api';  // Android emulator
+  // } else if (Platform.OS === 'ios') {
+  //   return 'http://localhost:3000/api';
+  // } else {
+  //   return 'http://localhost:3000/api';
+  // }
 };
 
 // App Configuration
