@@ -16,22 +16,24 @@ import onboardingService from '../services/onboardingService';
 import ProgressBar from '../components/ProgressBar';
 
 const IncomeSetupScreen = ({ navigation }) => {
-  const { theme } = useTheme();
-  const [incomeData, setIncomeData] = useState({
+  const { theme } = useTheme();// screen get its colors for light/dark mode
+  const [incomeData, setIncomeData] = useState({ // this is where the main income information is stored.
+    // this is where primary income amount stored
     primary: {
       amount: '',
       source: '',
       frequency: 'monthly'
     },
+    // this is where secondary income amount stored
     secondary: {
       amount: '',
       source: '',
-      frequency: 'monthly'
+      frequency: 'monthly' //default frequency for income
     }
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); //loading state is defined
 
-  const frequencyOptions = [
+  const frequencyOptions = [ //frequency options defined
     { value: 'weekly', label: 'Weekly' },
     { value: 'bi-weekly', label: 'Bi-weekly' },
     { value: 'monthly', label: 'Monthly' },

@@ -19,24 +19,34 @@ import { DEFAULT_EXPENSE_CATEGORIES } from '../../../constants';
 
 const BudgetScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  
+  // Main budget data storage
   const [budgetData, setBudgetData] = useState({
     totalIncome: 0,
     totalExpenses: 0,
     allocations: [],
     categories: []
   });
+  
+  // Loading state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Add budget modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAllocation, setEditingAllocation] = useState(null);
+  
+  // Form for adding new budget
   const [allocationForm, setAllocationForm] = useState({
     categoryId: '',
     percentage: '',
     budgetLimit: ''
   });
+  
   const [categorySpendingMap, setCategorySpendingMap] = useState({});
   const [allCategories, setAllCategories] = useState([]);
 
+  // Load budget data on screen open
   useEffect(() => {
     loadBudgetData();
   }, []);
@@ -47,11 +57,10 @@ const BudgetScreen = ({ navigation }) => {
       const currentUser = authService.getCurrentUser();
       if (!currentUser) return;
 
-      // Load income
+      // Calculate monthly income, monthly expenses
       const incomeData = await databaseService.getIncomeByUser(currentUser.id);
       const totalIncome = incomeData.reduce((sum, income) => sum + (income.amount || 0), 0);
 
-      // Load expenses for current month
       const expenseData = await databaseService.getExpensesByUser(currentUser.id);
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
@@ -69,7 +78,6 @@ const BudgetScreen = ({ navigation }) => {
 
       // Combine user categories with default categories
       const combinedCategories = [
-        // User categories from database
         ...userCategories.filter(cat => cat.is_active).map(cat => ({
           id: cat.id,
           name: cat.name,
@@ -78,7 +86,6 @@ const BudgetScreen = ({ navigation }) => {
           type: 'user',
           is_active: cat.is_active
         })),
-        // Default categories from constants
         ...DEFAULT_EXPENSE_CATEGORIES.map((cat, index) => ({
           id: `default_${index}`,
           name: cat.category,
@@ -89,102 +96,100 @@ const BudgetScreen = ({ navigation }) => {
         }))
       ];
 
-      // Remove duplicates based on category name
       const uniqueCategories = combinedCategories.filter((category, index, self) =>
         index === self.findIndex((c) => c.name === category.name)
       );
 
       setAllCategories(uniqueCategories);
 
-      // Load allocations
+      // Load allocations - where we can find buckets in the database
       const allocationTemplates = await databaseService.getAllocationsByUser(currentUser.id);
       
-      // Transform allocation data to match what the component expects
+       // Process each bucket
       const allocations = [];
       allocationTemplates.forEach(template => {
         template.buckets.forEach(bucket => {
-          // Better category identification
           let category_id = null;
           let category_name = null;
           
-          // Check if bucket name is a category ID format
+          // Check if bucket name follows "Category X" format
           const idMatch = bucket.name.match(/Category (\d+)/);
           if (idMatch) {
             category_id = parseInt(idMatch[1]);
           } else {
-            // It's a category name (for default categories)
             category_name = bucket.name;
-            // Try to find matching category in our combined list
             const matchingCategory = uniqueCategories.find(cat => cat.name === bucket.name);
             if (matchingCategory) {
               category_id = matchingCategory.type === 'user' ? matchingCategory.id : null;
             }
           }
           
+          // Create allocation object with all necessary data
           allocations.push({
             id: bucket.id,
             template_id: template.id,
-            category_id: category_id,
-            category_name: category_name,
-            percentage: bucket.percentage,
-            budget_limit: bucket.target_amount,
-            bucket_name: bucket.name
+            category_id: category_id,        
+            category_name: category_name,    
+            percentage: bucket.percentage,   
+            budget_limit: bucket.target_amount, 
+            bucket_name: bucket.name        
           });
         });
       });
-
-      // Calculate category spending for user categories only
+      
       const spendingMap = {};
       for (const category of userCategories) {
         const spending = await calculateCategorySpending(category.id);
-        spendingMap[category.id] = spending;
+        spendingMap[category.id] = spending; 
       }
       setCategorySpendingMap(spendingMap);
-
+      
+      // Update the main budget data state with all calculated information
       setBudgetData({
-        totalIncome,
-        totalExpenses,
-        allocations,
-        categories: uniqueCategories
+        totalIncome,        
+        totalExpenses,       
+        allocations,        
+        categories: uniqueCategories 
       });
-    } catch (error) {
+      } catch (error) {  
       console.error('Error loading budget data:', error);
       Alert.alert('Error', 'Failed to load budget data');
-    } finally {
-      setLoading(false);
-    }
-  };
+      } finally {
+      setLoading(false); 
+      }
+      }  
+      
+      // Helper function to assign colors to default expense categories
+      const getColorForDefaultCategory = (categoryName) => {
+      const colorMap = {
+        'House Rent': '#FF6B6B',      
+        'Food & Dining': '#4ECDC4',   
+        'Transportation': '#45B7D1',  
+        'Utilities': '#FFA07A',       
+        'Healthcare': '#98D8C8',      
+        'Entertainment': '#F06292',   
+        'Shopping': '#AED581',        
+        'Dining Out': '#FFCC80',      
+        'Emergency Fund': '#9575CD',  
+        'Investment': '#4DB6AC'   
+      };
+      // Return assigned color or default blue if category not found
+      return colorMap[categoryName] || '#2196F3';
+      };
 
-  // Helper function to get colors for default categories
-  const getColorForDefaultCategory = (categoryName) => {
-    const colorMap = {
-      'House Rent': '#FF6B6B',
-      'Food & Dining': '#4ECDC4',
-      'Transportation': '#45B7D1',
-      'Utilities': '#FFA07A',
-      'Healthcare': '#98D8C8',
-      'Entertainment': '#F06292',
-      'Shopping': '#AED581',
-      'Dining Out': '#FFCC80',
-      'Emergency Fund': '#9575CD',
-      'Investment': '#4DB6AC'
-    };
-    return colorMap[categoryName] || '#2196F3';
-  };
-
+  // Pull-to-refresh function
   const onRefresh = async () => {
     setRefreshing(true);
     await loadBudgetData();
     setRefreshing(false);
   };
 
-  // Safe currency formatting
+  // Format money as Euros
   const formatCurrency = (amount) => {
     const numAmount = parseFloat(amount) || 0;
     return `€${numAmount.toFixed(2)}`;
   };
 
-  // Implement category spending calculation (for user categories only)
   const calculateCategorySpending = async (categoryId) => {
     try {
       const currentUser = authService.getCurrentUser();
@@ -210,6 +215,7 @@ const BudgetScreen = ({ navigation }) => {
     }
   };
 
+  // 50/30/20 budget rule
   const getBudgetRecommendations = () => {
     const { totalIncome } = budgetData;
     const safeIncome = totalIncome || 0;
@@ -220,6 +226,7 @@ const BudgetScreen = ({ navigation }) => {
     };
   };
 
+  // Save new budget allocation
   const handleSaveAllocation = async () => {
     console.log('Saving allocation with form data:', allocationForm);
     
@@ -237,7 +244,6 @@ const BudgetScreen = ({ navigation }) => {
 
       const userId = currentUser.id;
 
-      // Get the selected category
       const selectedCategory = allCategories.find(cat => 
         cat.id && cat.id.toString() === allocationForm.categoryId.toString()
       );
@@ -249,7 +255,6 @@ const BudgetScreen = ({ navigation }) => {
 
       console.log('Selected category:', selectedCategory);
 
-      // Prepare allocation data
       const allocationData = {
         userId: userId,
         categoryId: selectedCategory.type === 'user' ? parseInt(selectedCategory.id) : null,
@@ -262,10 +267,8 @@ const BudgetScreen = ({ navigation }) => {
 
       let result;
       if (editingAllocation) {
-        // Update existing allocation
         result = await databaseService.updateAllocation(editingAllocation.template_id, allocationData);
         
-        // Queue for sync - include all necessary data
         syncManager.queueForSync('allocation', 'update', {
           ...allocationData,
           template_id: editingAllocation.template_id,
@@ -275,10 +278,8 @@ const BudgetScreen = ({ navigation }) => {
         
         console.log('Queued allocation update for sync');
       } else {
-        // Create new allocation
         result = await databaseService.createAllocation(allocationData);
         
-        // Queue for sync - include all necessary data
         syncManager.queueForSync('allocation', 'create', {
           ...allocationData,
           template_id: result.id,
@@ -300,7 +301,6 @@ const BudgetScreen = ({ navigation }) => {
     }
   };
 
-  // Helper to get category by ID
   const getCategoryById = (categoryId) => {
     if (!categoryId) return null;
     return allCategories.find(cat => 
@@ -308,21 +308,19 @@ const BudgetScreen = ({ navigation }) => {
     );
   };
 
+  //edit allocation
   const openEditAllocation = (allocation) => {
     console.log('Editing allocation:', allocation);
     
-    // Determine the category ID for the form
     let categoryId = '';
     if (allocation.category_id) {
       categoryId = allocation.category_id.toString();
     } else if (allocation.category_name) {
-      // Try to find the category by name
       const category = allCategories.find(cat => cat.name === allocation.category_name);
       if (category) {
         categoryId = category.id.toString();
       }
     } else if (allocation.bucket_name && !allocation.bucket_name.startsWith('Category ')) {
-      // If bucket_name is a category name (not "Category X"), find the category
       const category = allCategories.find(cat => cat.name === allocation.bucket_name);
       if (category) {
         categoryId = category.id.toString();
@@ -338,6 +336,7 @@ const BudgetScreen = ({ navigation }) => {
     setModalVisible(true);
   };
 
+  // delete allocation
   const deleteAllocation = async (allocation) => {
     Alert.alert(
       'Delete Allocation',
@@ -357,7 +356,6 @@ const BudgetScreen = ({ navigation }) => {
 
               await databaseService.deleteAllocation(allocation.template_id);
               
-              // Queue for sync - include all necessary data
               syncManager.queueForSync('allocation', 'delete', {
                 userId: currentUser.id,
                 template_id: allocation.template_id,
@@ -378,6 +376,7 @@ const BudgetScreen = ({ navigation }) => {
     );
   };
 
+  // remaining budget
   const renderBudgetOverview = () => {
     const { totalIncome, totalExpenses } = budgetData;
     const remaining = (totalIncome || 0) - (totalExpenses || 0);
@@ -448,8 +447,8 @@ const BudgetScreen = ({ navigation }) => {
     );
   };
 
+  //budget allocations
   const renderAllocationCard = (allocation, index) => {
-    // Better category lookup
     let category;
     if (allocation.category_id) {
       category = getCategoryById(allocation.category_id);
@@ -480,6 +479,7 @@ const BudgetScreen = ({ navigation }) => {
             )}
           </View>
           
+          {/* Edit and delete buttons */}
           <View style={styles.allocationActions}>
             <TouchableOpacity
               style={[styles.actionButton, styles.editButton]}
@@ -506,6 +506,7 @@ const BudgetScreen = ({ navigation }) => {
           </Text>
         </View>
         
+        {/* ANSWER 10: Progress bars for budget spending */}
         <View style={styles.progressBarContainer}>
           <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
             <View
@@ -678,6 +679,7 @@ const BudgetScreen = ({ navigation }) => {
           </Text>
         </View>
         
+        {/* Add Budget button */}
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
           onPress={() => setModalVisible(true)}
@@ -700,6 +702,7 @@ const BudgetScreen = ({ navigation }) => {
           Budget Allocations
         </Text>
 
+        {/* ANSWER 14: Empty state when no budgets exist */}
         {budgetData.allocations.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: theme.colors.card }]}>
             <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>

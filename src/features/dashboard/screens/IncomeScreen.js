@@ -20,12 +20,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const IncomeScreen = ({ navigation }) => {
   const { theme } = useTheme();
-  const [incomes, setIncomes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [incomes, setIncomes] = useState([]); //all incomes store
+  const [loading, setLoading] = useState(true); //loading state
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingIncome, setEditingIncome] = useState(null);
-  const [newIncome, setNewIncome] = useState({
+  const [modalVisible, setModalVisible] = useState(false); //add income modal state
+  const [editingIncome, setEditingIncome] = useState(null); //edit income modal state
+  const [newIncome, setNewIncome] = useState({ //structure for new income data
     amount: '',
     source: '',
     type: 'primary',
@@ -36,7 +36,7 @@ const IncomeScreen = ({ navigation }) => {
   // Refs to keep track of open swipeables
   const swipeableRefs = useRef(new Map());
 
-  useEffect(() => {
+  useEffect(() => { //load incomes when screen opens
     loadIncomes();
   }, []);
 
@@ -83,13 +83,13 @@ const IncomeScreen = ({ navigation }) => {
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = async () => { //pull-to-refresh function
     setRefreshing(true);
     await loadIncomes();
     setRefreshing(false);
   };
 
-  const handleAddIncome = async () => {
+  const handleAddIncome = async () => { //validation for adding income
     if (!newIncome.amount || !newIncome.source) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
@@ -167,16 +167,16 @@ const IncomeScreen = ({ navigation }) => {
     }
   };
 
-  const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
+  const formatCurrency = (amount) => `€${amount.toFixed(2)}`; //format money as Euros
 
-  const getTotalMonthlyIncome = () => {
+  const getTotalMonthlyIncome = () => { //calculates total monthly income
     return incomes
       .filter(income => income.frequency === 'monthly')
       .reduce((total, income) => total + income.amount, 0);
   };
 
   // Render right actions for swipeable - now with immediate deletion
-  const renderRightActions = (progress, dragX, income) => {
+  const renderRightActions = (progress, dragX, income) => { //swipe delete functionality
     const trans = dragX.interpolate({
       inputRange: [-100, 0],
       outputRange: [0, 100],
@@ -477,13 +477,13 @@ const IncomeScreen = ({ navigation }) => {
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Income Sources</Text>
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => setModalVisible(true)}
+              onPress={() => setModalVisible(true)} //Add Income button
             >
               <Text style={styles.addButtonText}>+ Add Income</Text>
             </TouchableOpacity>
           </View>
 
-          {incomes.length === 0 ? (
+          {incomes.length === 0 ? ( //empty state when no incomes exist
             <View style={[styles.emptyState, { backgroundColor: theme.colors.card }]}>
               <Text style={styles.emptyStateIcon}>💰</Text>
               <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
