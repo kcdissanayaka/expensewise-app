@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { authService } from "../../../services";
 import onboardingService from "../../onboarding/services/onboardingService";
+import { ErrorToast } from "../../../components/common";
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -24,6 +24,7 @@ const LoginScreen = ({ navigation }) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [errorToast, setErrorToast] = useState({ visible: false, message: '', type: 'error' });
 
   // Email validation
   const validateEmail = (email) => {
@@ -157,67 +158,48 @@ const LoginScreen = ({ navigation }) => {
         } else if (errorMessage.toLowerCase().includes("password")) {
           setErrors((prev) => ({ ...prev, password: errorMessage }));
         } else {
-          Alert.alert("Login Failed", errorMessage);
+          setErrorToast({
+            visible: true,
+            message: errorMessage,
+            type: "error",
+          });
         }
       }
     } catch (error) {
-      console.error("Login error:", error);
+      // Log the error (use console.log to avoid LogBox notification)
+      console.log("Login error:", error.message);
 
       // Display user-friendly error messages based on error type
-      if (
-        error.message.toLowerCase().includes("user not found")
-      ) {
-        Alert.alert(
-          "User Not Found",
-          "This account is not registered. Please sign up first.",
-          [
-            { 
-              text: "Sign Up", 
-              onPress: handleSignUp,
-              style: "default"
-            },
-            { text: "Cancel", style: "cancel" },
-          ]
-        );
+      let errorMessage = "";
+      let errorType = "error";
+
+      if (error.message.toLowerCase().includes("user not found")) {
+        errorMessage = "Account not found. Please sign up first.";
       } else if (
         error.message.includes("network") ||
         error.message.includes("fetch")
       ) {
-        Alert.alert(
-          "Connection Error",
-          "Please check your internet connection and try again.",
-          [
-            { text: "Retry", onPress: handleLogin },
-            { text: "Cancel", style: "cancel" },
-          ]
-        );
+        errorMessage = "No internet connection. Please check and try again.";
+        errorType = "warning";
       } else if (
         error.message.includes("database") ||
         error.message.includes("SQLite")
       ) {
-        Alert.alert(
-          "Database Error",
-          "There was an issue accessing your account data. Please try restarting the app.",
-          [{ text: "OK" }]
-        );
+        errorMessage = "Database error. Please restart the app.";
       } else if (error.message.includes("timeout")) {
-        Alert.alert(
-          "Request Timeout",
-          "The login request took too long. Please try again.",
-          [
-            { text: "Retry", onPress: handleLogin },
-            { text: "Cancel", style: "cancel" },
-          ]
-        );
+        errorMessage = "Request timeout. Please try again.";
+        errorType = "warning";
+      } else if (error.message.toLowerCase().includes("password")) {
+        errorMessage = "Incorrect password. Please try again.";
       } else {
-        // Generic error handling
-        const errorMessage =
-          error.message || "An unexpected error occurred during login";
-        Alert.alert("Login Error", errorMessage, [
-          { text: "Try Again", onPress: handleLogin },
-          { text: "Cancel", style: "cancel" },
-        ]);
+        errorMessage = error.message || "Login failed. Please try again.";
       }
+
+      setErrorToast({
+        visible: true,
+        message: errorMessage,
+        type: errorType,
+      });
     } finally {
       setLoading(false);
     }
@@ -228,12 +210,12 @@ const LoginScreen = ({ navigation }) => {
     try {
       navigation.navigate("ForgotPassword");
     } catch (navError) {
-      console.error("Navigation error to ForgotPassword:", navError);
-      Alert.alert(
-        "Navigation Error",
-        "Unable to open forgot password screen. Please try again.",
-        [{ text: "OK" }]
-      );
+      console.log("Navigation error to ForgotPassword:", navError.message);
+      setErrorToast({
+        visible: true,
+        message: "Unable to open forgot password screen.",
+        type: "error",
+      });
     }
   };
 
@@ -242,18 +224,27 @@ const LoginScreen = ({ navigation }) => {
     try {
       navigation.navigate("SignUp");
     } catch (navError) {
-      console.error("Navigation error to SignUp:", navError);
-      Alert.alert(
-        "Navigation Error",
-        "Unable to open sign up screen. Please try again.",
-        [{ text: "OK" }]
-      );
+      console.log("Navigation error to SignUp:", navError.message);
+      setErrorToast({
+        visible: true,
+        message: "Unable to open sign up screen.",
+        type: "error",
+      });
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
+      
+      {/* Custom Error Toast */}
+      <ErrorToast
+        visible={errorToast.visible}
+        message={errorToast.message}
+        type={errorToast.type}
+        onDismiss={() => setErrorToast({ visible: false, message: '', type: 'error' })}
+      />
+      
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

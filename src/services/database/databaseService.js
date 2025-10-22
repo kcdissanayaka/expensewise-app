@@ -44,16 +44,19 @@ class DatabaseService {
 
   async initialize() {
     if (this.isInitializing) {
+      console.warn('Database initialization already in progress');
       return false;
     }
 
     try {
       this.isInitializing = true;
+      console.log('Database initialization starting...');
       
       // Close existing connection if any
       if (this.db) {
         try {
           await this.db.closeAsync();
+          console.log('Closed existing database connection');
         } catch (error) {
           console.warn('Error closing existing database connection:', error);
         }
@@ -61,22 +64,27 @@ class DatabaseService {
       }
       
       // Open database connection
+      console.log('Opening database: expensewise.db');
       this.db = await SQLite.openDatabaseAsync('expensewise.db');
       
       if (!this.db) {
         throw new Error('Failed to open database connection');
       }
       
+      console.log('Database connection opened');
+      
       // Test the connection immediately
       await this.db.getFirstAsync('SELECT 1');
+      console.log('Database connection test passed');
       
       // Create all tables
       await this.createTables();
       return true;
     } catch (error) {
       console.error('Database initialization failed:', error);
+      console.error('Error details:', error.message);
       this.db = null; // Reset on failure
-      throw error; // Propagate error for proper handling
+      return false; // Return false instead of throwing
     } finally {
       this.isInitializing = false;
     }
