@@ -203,7 +203,7 @@ export class SyncService {
         status: localExpense.status || 'Pending'
       };
       
-      console.log('📤 Sending expense to backend:', {
+      console.log('Sending expense to backend:', {
         categoryId: backendExpense.categoryId,
         title: backendExpense.title,
         amount: backendExpense.amount

@@ -672,18 +672,40 @@ async deleteIncome(incomeId) {
           ]
         );
       
-      const newExpense = { 
-        id: result.lastInsertRowId, 
-        userId,
-        ...expenseData,
-        needs_sync: true
-      };
-      
-      // Queue for background sync
-      const { default: syncManager } = await import('../sync/syncManager');
-      syncManager.queueForSync('expense', 'create', newExpense);
-      
-      return newExpense;
+        // Build the new expense object
+        const newExpense = { 
+          id: result.lastInsertRowId, 
+          userId,
+          ...expenseData,
+          needs_sync: true
+        };
+
+        // --- CATEGORY NAME MAPPING FOR BACKEND SYNC ---
+        // The backend requires a MongoDB ObjectId for categoryId, not a local integer.
+        // To map local categories to backend IDs, we must queue the category name.
+        // This allows syncManager to look up the correct backend ID before syncing.
+        let categoryName = null;
+        if (categoryId) {
+          try {
+            // Fetch the category name from local DB using the local categoryId
+            const category = await this.db.getFirstAsync(
+              'SELECT name FROM categories WHERE id = ?',
+              [categoryId]
+            );
+            categoryName = category?.name;
+          } catch (err) {
+            console.warn('Could not fetch category name:', err);
+          }
+        }
+
+        // Queue for background sync, including category_name for backend mapping
+        const { default: syncManager } = await import('../sync/syncManager');
+        syncManager.queueForSync('expense', 'create', {
+          ...newExpense,
+          category_name: categoryName // Used by syncManager to map to backend ObjectId
+        });
+
+        return newExpense;
     } catch (error) {
       console.error('Error creating expense:', error);
       throw error;
