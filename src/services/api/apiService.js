@@ -253,6 +253,33 @@ class ApiService {
     });
   }
 
+  // Allocation endpoints - ADDED METHODS
+  async getAllocations(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/allocations?${queryString}` : "/allocations";
+    return await this.request(endpoint);
+  }
+
+  async createAllocation(allocationData) {
+    return await this.request("/allocations", {
+      method: "POST",
+      body: JSON.stringify(allocationData),
+    });
+  }
+
+  async updateAllocation(id, allocationData) {
+    return await this.request(`/allocations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(allocationData),
+    });
+  }
+
+  async deleteAllocation(id) {
+    return await this.request(`/allocations/${id}`, {
+      method: "DELETE",
+    });
+  }
+
   // Analytics and Reports
   async getAnalytics(params = {}) {
     return await this.request("/analytics");
