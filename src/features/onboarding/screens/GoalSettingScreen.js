@@ -15,11 +15,15 @@ import OnboardingCard from '../components/OnboardingCard';
 
 const GoalSettingScreen = ({ navigation }) => {
   const { theme } = useTheme();
+  // Selected goals are stored in this state array
   const [selectedGoals, setSelectedGoals] = useState([]);
+  // Loading state for saving goals
   const [loading, setLoading] = useState(false);
 
+  // Goals are loaded from the onboarding service
   const goals = onboardingService.getFinancialGoalsOptions();
 
+  // This function toggles goals when user taps on a card
   const handleGoalToggle = (goalId) => {
     setSelectedGoals(prev => {
       if (prev.includes(goalId)) {
@@ -30,7 +34,9 @@ const GoalSettingScreen = ({ navigation }) => {
     });
   };
 
+  // Next button handler with validation
   const handleNext = async () => {
+    // Validation: Check if at least one goal is selected
     if (selectedGoals.length === 0) {
       Alert.alert('Select Goals', 'Please select at least one financial goal to continue.');
       return;
@@ -39,6 +45,7 @@ const GoalSettingScreen = ({ navigation }) => {
     setLoading(true);
     
     try {
+      // Save selected goals to the service
       const success = await onboardingService.saveFinancialGoals(selectedGoals);
       
       if (success) {
@@ -63,10 +70,10 @@ const GoalSettingScreen = ({ navigation }) => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         
-        {/* Progress Bar */}
+        {/* Progress Bar showing step 2 of 8 */}
         <ProgressBar currentStep={2} totalSteps={8} />
 
-        {/* Header */}
+        {/* Header section with title and subtitle */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.colors.text }]}>
             What are your financial goals?
@@ -76,7 +83,7 @@ const GoalSettingScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Goals */}
+        {/* Goals container with mapped goal cards */}
         <View style={styles.goalsContainer}>
           {goals.map((goal) => (
             <OnboardingCard
@@ -91,7 +98,7 @@ const GoalSettingScreen = ({ navigation }) => {
           ))}
         </View>
 
-        {/* Selection Info */}
+        {/* Selection info showing count of selected goals */}
         {selectedGoals.length > 0 && (
           <View style={[styles.selectionInfo, { backgroundColor: theme.colors.surface }]}>
             <Text style={[styles.selectionText, { color: theme.colors.text }]}>
@@ -102,7 +109,7 @@ const GoalSettingScreen = ({ navigation }) => {
 
       </ScrollView>
 
-      {/* Footer Buttons */}
+      {/* Footer buttons with conditional styling */}
       <View style={[styles.footer, { borderTopColor: theme.colors.surface }]}>
         <TouchableOpacity
           style={[styles.backButton, { borderColor: theme.colors.surface }]}
@@ -114,23 +121,28 @@ const GoalSettingScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
 
+        {/* Next button changes appearance based on selection and loading state */}
         <TouchableOpacity
           style={[
             styles.nextButton,
             { 
+              // Button is colored only when goals are selected
               backgroundColor: selectedGoals.length > 0 ? theme.colors.primary : theme.colors.surface,
               opacity: loading ? 0.6 : 1
             }
           ]}
           onPress={handleNext}
+          // Disabled when no goals selected or loading
           disabled={selectedGoals.length === 0 || loading}
         >
           <Text style={[
             styles.nextButtonText, 
             { 
+              // Text color changes based on selection state
               color: selectedGoals.length > 0 ? '#FFFFFF' : theme.colors.textSecondary
             }
           ]}>
+            {/* Shows loading text when saving */}
             {loading ? 'Saving...' : 'Next'}
           </Text>
         </TouchableOpacity>

@@ -14,11 +14,12 @@ class ApiService {
     if (this.initialized) return;
     
     try {
+      // This gets the saved token from device storage
       const token = await AsyncStorage.getItem('@ExpenseWise:authToken');
       if (token) {
-        this.authToken = token;
+        this.authToken = token; // Save token in memory for quick access
       }
-      this.initialized = true;
+      this.initialized = true; // Mark service as ready
     } catch (error) {
       console.error('Failed to initialize apiService:', error);
     }
@@ -228,6 +229,7 @@ class ApiService {
 
   // Income endpoints for sync
   async getIncome(params = {}) {
+    // This converts parameters like {category: 'salary', page: 1} to "category=salary&page=1"
     const queryString = new URLSearchParams(params).toString();
     const endpoint = queryString ? `/income?${queryString}` : "/income";
     return await this.request(endpoint);

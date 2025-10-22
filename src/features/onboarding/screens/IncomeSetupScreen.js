@@ -16,24 +16,30 @@ import onboardingService from '../services/onboardingService';
 import ProgressBar from '../components/ProgressBar';
 
 const IncomeSetupScreen = ({ navigation }) => {
-  const { theme } = useTheme();// screen get its colors for light/dark mode
-  const [incomeData, setIncomeData] = useState({ // this is where the main income information is stored.
-    // this is where primary income amount stored
+  // Screen gets its colors for light/dark mode from theme
+  const { theme } = useTheme();
+  // Main income information is stored in this state object
+  const [incomeData, setIncomeData] = useState({
+    // Primary income amount and details stored here
     primary: {
       amount: '',
       source: '',
+      // Default frequency is set to monthly
       frequency: 'monthly'
     },
-    // this is where secondary income amount stored
+    // Secondary income amount and details stored here
     secondary: {
       amount: '',
       source: '',
-      frequency: 'monthly' //default frequency for income
+      // Default frequency for secondary income also monthly
+      frequency: 'monthly'
     }
   });
-  const [loading, setLoading] = useState(false); //loading state is defined
+  // Loading state defined for saving operations
+  const [loading, setLoading] = useState(false);
 
-  const frequencyOptions = [ //frequency options defined
+  // Frequency options defined as an array of objects
+  const frequencyOptions = [
     { value: 'weekly', label: 'Weekly' },
     { value: 'bi-weekly', label: 'Bi-weekly' },
     { value: 'monthly', label: 'Monthly' },
@@ -41,12 +47,13 @@ const IncomeSetupScreen = ({ navigation }) => {
   ];
 
   const handleNext = async () => {
-    // Validation
+    // Validation for primary income amount
     if (!incomeData.primary.amount || parseFloat(incomeData.primary.amount) <= 0) {
       Alert.alert('Error', 'Please enter your primary income amount');
       return;
     }
 
+    // Validation for primary income source
     if (!incomeData.primary.source.trim()) {
       Alert.alert('Error', 'Please enter your income source');
       return;
@@ -55,7 +62,7 @@ const IncomeSetupScreen = ({ navigation }) => {
     setLoading(true);
     
     try {
-      // Save income data
+      // Save income data to onboarding service
       const success = await onboardingService.saveIncomeData(incomeData);
       
       if (success) {
@@ -76,6 +83,7 @@ const IncomeSetupScreen = ({ navigation }) => {
     navigation.goBack();
   };
 
+  // Updates only the primary income fields without affecting other state
   const updatePrimaryIncome = (field, value) => {
     setIncomeData(prev => ({
       ...prev,
@@ -86,6 +94,7 @@ const IncomeSetupScreen = ({ navigation }) => {
     }));
   };
 
+  // Updates only the secondary income fields without affecting other state
   const updateSecondaryIncome = (field, value) => {
     setIncomeData(prev => ({
       ...prev,
@@ -96,6 +105,7 @@ const IncomeSetupScreen = ({ navigation }) => {
     }));
   };
 
+  // Input formatting for currency amount - ensures only numbers are entered
   const formatCurrency = (value) => {
     // Remove non-numeric characters except decimal point
     const numericValue = value.replace(/[^0-9.]/g, '');
@@ -111,16 +121,17 @@ const IncomeSetupScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* KeyboardAvoidingView prevents keyboard from covering inputs */}
       <KeyboardAvoidingView 
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           
-          {/* Progress Bar */}
+          {/* Progress Bar showing step 3 of 8 */}
           <ProgressBar currentStep={3} totalSteps={8} />
 
-          {/* Header */}
+          {/* Header section */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.colors.text }]}>
               Let's set up your income
@@ -140,6 +151,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Income Source
               </Text>
+              {/* Primary income source input field */}
               <TextInput
                 style={[styles.input, { 
                   backgroundColor: theme.colors.background,
@@ -157,6 +169,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Amount (EUR)
               </Text>
+              {/* Primary income amount input field with currency formatting */}
               <TextInput
                 style={[styles.input, { 
                   backgroundColor: theme.colors.background,
@@ -175,6 +188,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Frequency
               </Text>
+              {/* Frequency selector buttons with conditional styling */}
               <View style={styles.frequencyContainer}>
                 {frequencyOptions.map((option) => (
                   <TouchableOpacity
@@ -182,6 +196,7 @@ const IncomeSetupScreen = ({ navigation }) => {
                     style={[
                       styles.frequencyButton,
                       {
+                        // Button background changes based on selection
                         backgroundColor: incomeData.primary.frequency === option.value 
                           ? theme.colors.primary 
                           : theme.colors.background,
@@ -190,11 +205,13 @@ const IncomeSetupScreen = ({ navigation }) => {
                           : theme.colors.primary + '30',
                       }
                     ]}
+                    // Updates frequency when pressed
                     onPress={() => updatePrimaryIncome('frequency', option.value)}
                   >
                     <Text style={[
                       styles.frequencyText,
                       {
+                        // Text color changes based on selection
                         color: incomeData.primary.frequency === option.value 
                           ? '#FFFFFF' 
                           : theme.colors.text
@@ -221,6 +238,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Income Source
               </Text>
+              {/* Secondary income source input field */}
               <TextInput
                 style={[styles.input, { 
                   backgroundColor: theme.colors.background,
@@ -238,6 +256,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Amount (EUR)
               </Text>
+              {/* Secondary income amount input field with currency formatting */}
               <TextInput
                 style={[styles.input, { 
                   backgroundColor: theme.colors.background,
@@ -256,6 +275,7 @@ const IncomeSetupScreen = ({ navigation }) => {
               <Text style={[styles.label, { color: theme.colors.text }]}>
                 Frequency
               </Text>
+              {/* Secondary income frequency selector */}
               <View style={styles.frequencyContainer}>
                 {frequencyOptions.map((option) => (
                   <TouchableOpacity
@@ -293,6 +313,7 @@ const IncomeSetupScreen = ({ navigation }) => {
 
         {/* Footer Buttons */}
         <View style={[styles.footer, { borderTopColor: theme.colors.surface }]}>
+          {/* Back button */}
           <TouchableOpacity
             style={[styles.backButton, { borderColor: theme.colors.surface }]}
             onPress={handleBack}
@@ -303,6 +324,7 @@ const IncomeSetupScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
+          {/* Next button with loading state */}
           <TouchableOpacity
             style={[
               styles.nextButton,
@@ -315,6 +337,7 @@ const IncomeSetupScreen = ({ navigation }) => {
             disabled={loading}
           >
             <Text style={[styles.nextButtonText, { color: '#FFFFFF' }]}>
+              {/* Shows loading text when saving */}
               {loading ? 'Saving...' : 'Next'}
             </Text>
           </TouchableOpacity>

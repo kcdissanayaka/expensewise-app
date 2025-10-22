@@ -63,7 +63,6 @@ const IncomeScreen = ({ navigation }) => {
       }
     };
 
-    // Uncomment the line below to run the cleanup ONCE
     // resetBrokenData();
   }, []);
 
